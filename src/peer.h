@@ -16,10 +16,17 @@ namespace timax { namespace consensus
 		using client_ptr_t = std::unique_ptr<client_proxy>;
 	public:
 		peer(uint64_t server_id, raft& raft, io_service_t& io);
-		void begin_request_vote();
-		bool request_vote_done() const;
+		void begin_request_vote() noexcept;
+
+		bool request_vote_done() const noexcept;
+		bool& request_vote_done() noexcept;
+
+		bool have_vote() const noexcept;
+		bool& have_vote() noexcept;
+		
 		time_point_t backoff_until() const;
-		auto request_vote(uint64_t term, uint64_t candidate_id);
+		auto request_vote(uint64_t term, uint64_t candidate_id)
+			->TIMAX_MULTI_TYPE(uint64_t, uint64_t);
 		void begin_leadership();
 		bool exiting();
 		void stop();
@@ -30,7 +37,7 @@ namespace timax { namespace consensus
 		std::string						addresses_;
 		std::string						port_;
 		bool							request_vote_done_;
-		bool							accept_vote_;
+		bool							have_vote_;
 		std::atomic<bool>				exiting_;
 		time_point_t					backoff_until_;
 		thread_ptr_t					thread_;

@@ -130,7 +130,33 @@ namespace timax { namespace consensus
 					peer.request_vote(term, server_id);
 			}
 				
-			if(term)
+			if (term != current_term_ ||
+				role_ != server_status::candidate ||
+				peer.exiting())
+			{
+				// log
+				return;
+			}
+
+			if (term > current_term_)
+			{
+				step_down(term);
+			}
+			else
+			{
+				peer.request_vote_done() = true;
+				status_changed_.notify_all();
+				if (true)
+				{
+					peer.have_vote() = true;
+
+					
+				}
+				else
+				{
+					// log
+				}
+			}
 		}
 
 		void step_down(uint64_t new_term)

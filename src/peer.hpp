@@ -8,7 +8,7 @@ namespace timax { namespace consensus
 		, addresses_()
 		, port_()
 		, request_vote_done_(false)
-		, accept_vote_(false)
+		, have_vote_(false)
 		, exiting_(false)
 		, backoff_until_()
 		, thread_(std::make_unique<std::thread>(
@@ -18,15 +18,30 @@ namespace timax { namespace consensus
 	{
 	}
 
-	void peer::begin_request_vote()
+	void peer::begin_request_vote() noexcept
 	{
 		request_vote_done_ = false;
-		accept_vote_ = false;
+		have_vote_ = false;
 	}
 
-	bool peer::request_vote_done() const
+	bool peer::request_vote_done() const noexcept
 	{
 		return request_vote_done_;
+	}
+
+	bool& peer::request_vote_done() noexcept
+	{
+		return request_vote_done_;
+	}
+
+	bool peer::have_vote() const noexcept
+	{
+		return have_vote_;
+	}
+
+	bool& peer::have_vote() noexcept
+	{
+		return have_vote_;
 	}
 
 	time_point_t peer::backoff_until() const
@@ -36,6 +51,7 @@ namespace timax { namespace consensus
 	}
 
 	auto peer::request_vote(uint64_t term, uint64_t candidate_id)
+		-> TIMAX_MULTI_TYPE(uint64_t, uint64_t)
 	{
 		if (!client_)
 		{
@@ -44,7 +60,8 @@ namespace timax { namespace consensus
 			client_.swap(client);
 		}
 
-		return client_->call(with_tag(protocol::request_vote, ++message_id_), term, candidate_id);
+		return client_->call(protocol::request_vote, term, candidate_id);
+
 	}
 
 	void peer::begin_leadership()
