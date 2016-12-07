@@ -9,7 +9,7 @@ namespace timax { namespace db
 	class rocksdb_storage
 	{
 	public:
-		using snapshot_ptr = rocksdb::Snapshot*;
+		using snapshot_ptr = rocksdb::Snapshot const*;
 
 	public:
 		explicit rocksdb_storage(std::string const& path)
@@ -38,6 +38,11 @@ namespace timax { namespace db
 			if (!s.ok())
 				throw std::runtime_error{ s.getState() };
 			return value;
+		}
+
+		snapshot_ptr get_snapshot() const
+		{
+			return db_->GetSnapshot();
 		}
 
 	private:

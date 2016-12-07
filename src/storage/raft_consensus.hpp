@@ -1,6 +1,8 @@
 #pragma once
 
 #include <iterator>
+#include "../raft/raft.hpp"
+#include "semaphore.hpp"
 
 namespace timax { namespace db
 {
@@ -20,7 +22,7 @@ namespace timax { namespace db
 		{
 		}
 
-		snapshot_ptr get_snapshot(uint64_t log_index) const
+		snapshot_ptr get_snapshot(int64_t log_index) const
 		{
 			if (log_index < log_index_begin_)
 				return nullptr;
@@ -41,10 +43,10 @@ namespace timax { namespace db
 			return (*itr)[log_index];
 		}
 
-		bool put_snapshot(uint64_t log_index, snapshot_ptr snapshot)
+		void put_snapshot(int64_t log_index, snapshot_ptr snapshot)
 		{
 			if (log_index < log_index_begin_)
-				return false;
+				return;
 
 			log_index -= log_index_begin_;
 			auto advance = log_index / array_size;
@@ -70,13 +72,11 @@ namespace timax { namespace db
 				log_index_begin_ += array_size;
 				--advance;
 			}
-
-			return true;
 		}
 
 	private:
 		std::list<array_type>		snapshot_blocks_;
-		uint64_t					log_index_begin_;
+		int64_t					log_index_begin_;
 	};
 
 	template <typename StoragePolicy>
@@ -95,16 +95,57 @@ namespace timax { namespace db
 
 		void put(std::string const& key, std::string const& value)
 		{
+			// check leader
+			if (!raft_.check_leader())
+				throw ;
 
+			// serialize 'put' 'key' 'value' to a buffer
+			std::string serialized_log;
+			
+			// replicate the log
+			bool result, log_index;
+			std::tie(result, log_index) = replicate(std::move(serialized_log));
+			if (!result)
+				return;
+
+			// we actually commit the key-value
+			storage_.put(key, value);
+
+			// get snapshot
+			auto snapshot = storage_.get_snapshot();
+
+			// cache this snapshot with log_index
+			snapshot_blocks_.put_snapshot(log_index, snapshot);
 		}
 
 		std::string get(std::string const& key)
 		{
+			// check leader
+			if (!raft_.check_leader())
+				return;
+		}
 
+	private:
+		std::tuple<bool, int64_t> replicate(std::string&& data)
+		{
+			semaphore s;
+			bool result;
+			int64_t log_index;
+
+			raft_.replicate(std::move(data), [&] (bool r, int64_t index)
+			{
+				result = r;
+				log_index = index;
+				s.signal();
+			});
+
+			s.wait();
+			return std::make_tuple(result, log_index);
 		}
 
 	private:
 		storage_policy&		storage_;
 		sequence_list_type	snapshot_blocks_;
+		xraft::raft			raft_;
 	};
 } }

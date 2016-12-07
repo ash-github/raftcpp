@@ -18,6 +18,22 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\src\raft\detail\committer.hpp" />
+    <ClInclude Include="..\..\src\raft\detail\detail.hpp" />
+    <ClInclude Include="..\..\src\raft\detail\endec.hpp" />
+    <ClInclude Include="..\..\src\raft\detail\filelog.hpp" />
+    <ClInclude Include="..\..\src\raft\detail\functors.hpp" />
+    <ClInclude Include="..\..\src\raft\detail\macros.hpp" />
+    <ClInclude Include="..\..\src\raft\detail\metadata.hpp" />
+    <ClInclude Include="..\..\src\raft\detail\raft_configuration.hpp" />
+    <ClInclude Include="..\..\src\raft\detail\raft_peer.hpp" />
+    <ClInclude Include="..\..\src\raft\detail\raft_proto.hpp" />
+    <ClInclude Include="..\..\src\raft\detail\snapshot.hpp" />
+    <ClInclude Include="..\..\src\raft\detail\timer.hpp" />
+    <ClInclude Include="..\..\src\raft\detail\utils.hpp" />
+    <ClInclude Include="..\..\src\raft\raft.hpp" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{DC0DD49D-D425-4B0C-8DCD-14A6E7536089}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
@@ -126,9 +142,6 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <Text Include="ReadMe.txt" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
