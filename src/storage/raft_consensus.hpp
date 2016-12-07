@@ -125,6 +125,13 @@ namespace timax { namespace db
 				return;
 		}
 
+		void del(std::string const& key)
+		{
+			// check leader
+			if (!raft_.check_leader())
+				return;
+		}
+
 	private:
 		std::tuple<bool, int64_t> replicate(std::string&& data)
 		{
@@ -141,6 +148,11 @@ namespace timax { namespace db
 
 			s.wait();
 			return std::make_tuple(result, log_index);
+		}
+
+		bool write_snapshot(std::function<bool(const std::string &)> const& writer, int64_t log_index)
+		{
+			return storage_.write_snapshort(snapshot_blocks_.get_snapshot(), writer);
 		}
 
 	private:

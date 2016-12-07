@@ -3,6 +3,9 @@
 #include <thread>
 #include <rocksdb/db.h>
 #include <rocksdb/options.h>
+#include <functional>
+
+#include "serializer.hpp"
 
 namespace timax { namespace db 
 {
@@ -43,6 +46,32 @@ namespace timax { namespace db
 		snapshot_ptr get_snapshot() const
 		{
 			return db_->GetSnapshot();
+		}
+
+		bool write_snapshot(snapshot_ptr snapshot, std::function<bool(std::string const&)> const& writer)
+		{
+			if (nullptr == snapshot)
+				return false;
+
+			rocksdb::ReadOptions options;
+			options.snapshot = snapshot;
+			auto itr = db_->NewIterator(options);
+			if (!itr->Valid())
+				return false;
+
+			while (itr->Valid())
+			{
+				std::string buffer;
+				auto key = itr->value().ToString();
+				auto value = itr->key().ToString();
+				snapshot_serializer::pack(key, value, buffer);
+
+				if (!writer(buffer))
+					return false;
+
+				itr->Next();
+			}
+			return true;
 		}
 
 	private:
