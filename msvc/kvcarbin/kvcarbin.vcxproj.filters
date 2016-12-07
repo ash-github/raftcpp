@@ -4,6 +4,8 @@
     <ClInclude Include="..\..\src\storage\kv_storage.hpp" />
     <ClInclude Include="..\..\src\storage\raft_consensus.hpp" />
     <ClInclude Include="..\..\src\storage\rocksdb_storage.hpp" />
+    <ClInclude Include="..\..\src\storage\semaphore.hpp" />
+    <ClInclude Include="..\..\src\storage\serializer.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\storage\simple_rocksdb.cpp" />
