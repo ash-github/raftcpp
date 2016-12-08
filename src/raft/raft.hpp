@@ -1,4 +1,5 @@
 #pragma once
+#include <rest_rpc/server.hpp>
 #include "detail/detail.hpp"
 namespace xraft
 {
@@ -10,6 +11,7 @@ namespace xraft
 		using commit_entry_callback = std::function<void(std::string &&, int64_t)>;
 		using install_snapshot_callback = std::function<void(std::ifstream &)>;
 		using build_snapshot_callback = std::function<bool(const std::function<bool(const std::string &)>&, int64_t)>;
+		using rpc_server_t = timax::rpc::server<timax::rpc::msgpack_codec>;
 		enum state
 		{
 			e_follower,
@@ -42,6 +44,8 @@ namespace xraft
 		}
 		void init(raft_config config)
 		{
+			port_ = config.myself_.port_;
+			raft_id_ = config.myself_.raft_id_;
 			raft_config_mgr_.set(config.nodes_);
 			filelog_base_path_ = config.raftlog_base_path_;
 			metadata_base_path_ = config.metadata_base_path_;
@@ -61,23 +65,32 @@ namespace xraft
 			snapshot_builder_.set_snapshot_distance(1024);//for test
 
 			init_pees();
+			init_rpc_server();
 		}
 	private:
+		void init_rpc_server()
+		{
+			rpc_server_.reset(new rpc_server_t(port_, 1));
+			rpc_server_->register_handler("rpc_append_entries_request", timax::bind(&raft::handle_append_entries_request,this));
+			rpc_server_->register_handler("rpc_vote_request", timax::bind(&raft::handle_vote_request, this));
+			rpc_server_->register_handler("rpc_install_snapshot", timax::bind(&raft::handle_install_snapshot, this));
+			rpc_server_->start();
+		}
 		void init_pees()
 		{
-			using namespace std::placeholders;
+			//using namespace std::placeholders;
 			for (auto &itr: raft_config_mgr_.get_nodes())
 			{
 				pees_.emplace_back(new raft_peer);
 				raft_peer &peer = *(pees_.back());
-				peer.append_entries_success_callback_ = std::bind(&raft::append_entries_callback, this, _1);
-				peer.build_append_entries_request_ = std::bind(&raft::build_append_entries_request, this, _1);
+				peer.append_entries_success_callback_ = std::bind(&raft::append_entries_callback, this, std::placeholders::_1);
+				peer.build_append_entries_request_ = std::bind(&raft::build_append_entries_request, this, std::placeholders::_1);
 				peer.build_vote_request_ = std::bind(&raft::build_vote_request, this);
-				peer.vote_response_callback_ = std::bind(&raft::handle_vote_response, this, _1);
-				peer.new_term_callback_ = std::bind(&raft::handle_new_term, this, _1);
+				peer.vote_response_callback_ = std::bind(&raft::handle_vote_response, this, std::placeholders::_1);
+				peer.new_term_callback_ = std::bind(&raft::handle_new_term, this, std::placeholders::_1);
 				peer.get_current_term_ = [this] { return current_term_.load(); };
 				peer.get_last_log_index_ = std::bind(&raft::get_last_log_entry_index, this);
-				peer.connect_callback_ = std::bind(&raft::peer_connect_callback, this, _1, _2);
+				peer.connect_callback_ = std::bind(&raft::peer_connect_callback, this, std::placeholders::_1, std::placeholders::_2);
 				peer.myself_ = itr;
 				peer.send_cmd(raft_peer::cmd_t::e_connect);
 			}
@@ -108,7 +121,7 @@ namespace xraft
 			insert_callback(index, set_timeout(index), std::move(callback));
 			notify_peers();
 		}
-		auto handle_append_entries_request(append_entries_request && request)
+		append_entries_response  handle_append_entries_request(append_entries_request && request)
 		{
 			std::lock_guard<std::mutex> locker(mtx_);
 			append_entries_response response;
@@ -178,6 +191,7 @@ namespace xraft
 				});
 			}
 			set_election_timer();
+			return response;
 		}
 		vote_response handle_vote_request(const vote_request &request)
 		{
@@ -206,7 +220,7 @@ namespace xraft
 			response.log_ok_ = is_ok;
 			return response;
 		}
-		auto handle_install_snapshot (install_snapshot_request &request)
+		install_snapshot_response handle_install_snapshot (install_snapshot_request &request)
 		{
 			install_snapshot_response response;
 			response.term_ = current_term_;
@@ -249,6 +263,7 @@ namespace xraft
 			response.bytes_stored_ = snapshot_writer_.get_bytes_writted();
 			if (request.done_)
 			{
+				snapshot_writer_.close();
 				if (request.last_snapshot_index_ < last_snapshot_index_)
 				{
 					//todo Warm
@@ -261,13 +276,13 @@ namespace xraft
 		}
 		void load_snapshot()
 		{
-			snapshot_writer_.close();
+			
 			if (!snapshot_reader_.open(snapshot_writer_.get_snapshot_filepath()))
 			{
 				//todo process error;
 			}
 			commiter_.push([&] {
-				snapshot_head head;
+				snapshot_header head;
 				if (!snapshot_reader_.read_sanpshot_head(head))
 				{
 					//todo process error;
@@ -327,7 +342,7 @@ namespace xraft
 		void interrupt_vote()
 		{
 			for (auto &itr : pees_)
-				itr->send_cmd(raft_peer::cmd_t::e_interrupt_vote);
+				itr->interrupt();
 		}
 		void sleep_peer_threads()
 		{
@@ -532,5 +547,9 @@ namespace xraft
 		std::string snapshot_path_ = "data/snapshot/";
 
 		std::vector<vote_response>  vote_responses_;
+
+		//rpc
+		int port_;
+		std::unique_ptr<rpc_server_t> rpc_server_;
 	};
 }

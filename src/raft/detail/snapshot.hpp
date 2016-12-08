@@ -3,7 +3,7 @@ namespace xraft
 {
 	namespace detail
 	{
-		struct snapshot_head
+		struct snapshot_header
 		{
 			uint32_t version_ = 1;
 			static constexpr uint32_t magic_num_ = 'X'+'R'+'A'+'F'+'T';
@@ -25,7 +25,7 @@ namespace xraft
 				file_.open(filepath_.c_str(), mode);
 				return file_.good();
 			}
-			bool read_sanpshot_head(snapshot_head &head)
+			bool read_sanpshot_head(snapshot_header &head)
 			{
 				std::string buffer;
 				buffer.resize(sizeof(head));
@@ -75,7 +75,7 @@ namespace xraft
 				if(file_.is_open())
 					file_.close();
 			}
-			bool write_sanpshot_head(const snapshot_head &head)
+			bool write_sanpshot_head(const snapshot_header &head)
 			{
 				std::string buffer;
 				buffer.resize(sizeof(head));
@@ -158,7 +158,7 @@ namespace xraft
 					auto diff = commit_index  - get_log_start_index_();
 					if (diff > distance_)
 					{
-						snapshot_head head;
+						snapshot_header head;
 						head.last_included_index_ = commit_index;
 						head.last_included_term_ = get_log_entry_term_(commit_index);
 						snapshot_writer writer;
