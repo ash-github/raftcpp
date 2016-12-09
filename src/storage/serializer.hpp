@@ -35,7 +35,7 @@ namespace timax { namespace db
 			std::memcpy(work_ptr, value.data(), size_value);
 		}
 
-		static void unpack(std::string const buffer, std::string& key, std::string& value)
+		static void unpack(std::string const& buffer, std::string& key, std::string& value)
 		{
 			uint32_t size_key, size_value;
 

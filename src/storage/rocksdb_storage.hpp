@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <thread>
 #include <rocksdb/db.h>
@@ -55,7 +55,12 @@ namespace timax { namespace db
 
 			rocksdb::ReadOptions options;
 			options.snapshot = snapshot;
-			auto itr = db_->NewIterator(options);
+			std::unique_ptr<rocksdb::Iterator> itr{ db_->NewIterator(options) };
+			
+			if (nullptr == itr)
+				return false;
+
+			itr->SeekToFirst();
 			if (!itr->Valid())
 				return false;
 
@@ -71,7 +76,36 @@ namespace timax { namespace db
 
 				itr->Next();
 			}
+
 			return true;
+		}
+
+		void install_from_file(std::ifstream& in_stream)
+		{
+			std::unique_ptr<rocksdb::Iterator> itr{ db_->NewIterator(rocksdb::ReadOptions{}) };
+			
+			itr->SeekToFirst();
+			if (!itr->Valid())
+				throw;
+			auto const& begin_key = itr->key();
+
+			itr->SeekToLast();
+			if (!itr->Valid())
+				throw;
+			auto const& end_key = itr->key().ToString();
+
+			db_->DeleteRange(rocksdb::WriteOptions{}, db_->DefaultColumnFamily(), begin_key, end_key);
+
+			uint32_t size;
+			std::string buffer, key, value;
+			while (!in_stream.eof())
+			{
+				in_stream >> size;
+				buffer.resize(size);
+				in_stream >> buffer;
+				snapshot_serializer::unpack(buffer, key, value);
+				db_->Put(rocksdb::WriteOptions{}, key, value);
+			}
 		}
 
 	private:
