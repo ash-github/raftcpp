@@ -247,10 +247,10 @@ namespace detail
 			}
 		}
 		template<typename T>
-		void save_rpc_task(const T &result)
+		void save_rpc_task(T const& result)
 		{
 			std::lock_guard<std::mutex> loker(cannel_rpc_mtx_);
-			cannel_rpc_ = [result]()mutable { result.cancel(); };
+			cannel_rpc_ = [r = result]() mutable { r.cancel(); };
 		}
 		
 		void do_exist()
