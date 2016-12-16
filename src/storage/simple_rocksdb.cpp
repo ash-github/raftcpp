@@ -70,5 +70,7 @@ int main(void)
 		}
 	});
 
+	std::getchar();
+	kv_store_service.stop();
 	return 0;
 }
