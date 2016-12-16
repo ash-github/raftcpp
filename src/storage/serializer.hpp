@@ -4,15 +4,90 @@
 
 namespace timax { namespace db
 {
-	class log_serializer
+	enum class log_op : int32_t
 	{
-	public:
+		Write,
+		Delete
+	};
+
+	struct db_operation
+	{
+		int op_type;
+		std::string key;
+		std::string value;
+
+		META(op_type, key, value)
+	};
+
+	struct log_serializer
+	{
+		class string_buffer
+		{
+		public:
+			explicit string_buffer(std::string& buffer)
+				: buffer_(buffer)
+				, offset_(0)
+			{
+				buffer_.clear();
+			}
+
+			string_buffer(string_buffer const&) = default;
+			string_buffer(string_buffer &&) = default;
+			string_buffer& operator= (string_buffer const&) = default;
+			string_buffer& operator= (string_buffer &&) = default;
+
+			void write(char const* data, size_t length)
+			{
+				if (buffer_.size() - offset_ < length)
+					buffer_.resize(length + offset_);
+
+				std::memcpy(&buffer_[0] + offset_, data, length);
+				offset_ += length;
+			}
+
+			std::string release() const noexcept
+			{
+				return std::move(buffer_);
+			}
+
+		private:
+			std::string&			buffer_;
+			size_t				offset_;
+		};
+
+		static void pack_write(std::string& buffer, std::string const& key, std::string const& value)
+		{
+			auto tuple = std::make_tuple(static_cast<int>(log_op::Write), key, value);
+			string_buffer sb{ buffer };
+			msgpack::pack(sb, tuple);
+		}
+
+		static void pack_delete(std::string& buffer, std::string const& key)
+		{
+			using namespace std::string_literals;
+			auto tuple = std::make_tuple(static_cast<int>(log_op::Delete), key, ""s);
+			string_buffer sb{ buffer };
+			msgpack::pack(sb, tuple);
+		}
+
+		static auto unpack(std::string const& buffer)
+		{
+			try
+			{
+				msgpack::unpacked msg;
+				msgpack::unpack(&msg, buffer.data(), buffer.size());
+				return msg.get().as<db_operation>();
+			}
+			catch (...)
+			{
+				throw std::runtime_error{ "Serialization error." };
+			}
+		}
 
 	};
 
-	class snapshot_serializer
+	struct snapshot_serializer
 	{
-	public:
 		static void pack(std::string const& key, std::string const& value, std::string& buffer)
 		{
 			auto size_key = static_cast<uint32_t>(key.size());

@@ -96,21 +96,12 @@ namespace timax { namespace db
 		void put(std::string const& key, std::string const& value)
 		{
 			check_leader();
-
 			// serialize 'put' 'key' 'value' to a buffer
 			std::string serialized_log;
-			
+			log_serializer::pack_write(serialized_log, key, value);
 			// replicate the log
 			auto log_index = replicate(std::move(serialized_log));
-
-			// we actually commit the key-value
-			storage_.put(key, value);
-
-			// get snapshot
-			auto snapshot = storage_.get_snapshot();
-
-			// cache this snapshot with log_index
-			snapshot_blocks_.put_snapshot(log_index, snapshot);
+			put(log_index, key, value);
 		}
 
 		std::string get(std::string const& key)
@@ -123,9 +114,9 @@ namespace timax { namespace db
 		{
 			check_leader();
 			std::string serialized_log;
-			replicate(std::move(serialized_log));
-			storage_.del(key);
-
+			log_serializer::pack_delete(serialized_log, key);
+			auto log_index = replicate(std::move(serialized_log));
+			del(log_index, key);
 			// no need for del to write snapshot?
 		}
 
@@ -159,6 +150,36 @@ namespace timax { namespace db
 		bool write_snapshot(std::function<bool(const std::string &)> const& writer, int64_t log_index)
 		{
 			return storage_.write_snapshort(snapshot_blocks_.get_snapshot(), writer);
+		}
+
+		void commit_entry(std::string&& buffer, int64_t log_index)
+		{
+			auto db_op = log_serializer::unpack(buffer);
+			if (db_op.op_type = static_cast<int>(log_op::Write))
+			{
+				put(log_index, db_op.key, db_op.value);
+			}
+			else
+			{
+				del(log_index, db_op.key);
+			}
+		}
+
+		void put(int64_t log_index, std::string const& key, std::string const& value)
+		{
+			// we actually commit the key-value
+			storage_.put(key, value);
+
+			// get snapshot
+			auto snapshot = storage_.get_snapshot();
+
+			// cache this snapshot with log_index
+			snapshot_blocks_.put_snapshot(log_index, snapshot);
+		}
+
+		void del(int64_t log_index, std::string const& key)
+		{
+			storage_.del(key);
 		}
 
 	private:

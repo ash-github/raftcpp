@@ -65,6 +65,11 @@ namespace timax { namespace db
 			return { consensus_, std::move(key) };
 		}
 
+		void del(std::string const& key)
+		{
+			consensus_.del(key);
+		}
+
 	private:
 		storage_policy		storage_;
 		consensus_policy		consensus_;

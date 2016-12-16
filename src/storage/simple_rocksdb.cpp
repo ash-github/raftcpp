@@ -1,14 +1,74 @@
 #include <string>
+#include <rest_rpc/rpc.hpp>
 #include "kv_storage.hpp"
 #include "rocksdb_storage.hpp"
 #include "raft_consensus.hpp"
 
 int main(void)
 {
-	using db_type = timax::db::kv_storage<timax::db::rocksdb_storage>;
+	// our rpc server type
+	using timax::rpc::server;
+	using timax::rpc::msgpack_codec;
+	
+	using server_type = server<msgpack_codec>;
 
+	// our rocksdb storage engine
+	using timax::db::kv_storage;
+	using timax::db::rocksdb_storage;
+	using timax::db::raft_consensus;
+	using db_type = kv_storage<rocksdb_storage, raft_consensus>;
+
+	// using these two types later
+	using timax::rpc::exception;
+	using timax::rpc::error_code;
+
+	// initialize our db object
 	db_type db{ "d:/temp/tmp/test_rocksdb" };
-	db["key"] = "I have an apple pen.";
-	std::string value = db["key"];
+
+	// instantialize our server object
+	server_type kv_store_service{ 8999, std::thread::hardware_concurrency() };
+
+	// register put operation
+	kv_store_service.register_handler("put", 
+		[&db](std::string const& key, std::string const& value)
+	{
+		try
+		{
+			db[key] = value;
+		}
+		catch (std::exception const& e)
+		{
+			throw exception{ error_code::FAIL, e.what() };
+		}
+	});
+
+	// register get operation
+	kv_store_service.register_handler("get", 
+		[&db](std::string const& key) -> std::string
+	{
+		try
+		{
+			return db[key];
+		}
+		catch (std::exception const& e)
+		{
+			throw exception{ error_code::FAIL, e.what() };
+		}
+	});
+
+	// register del operation
+	kv_store_service.register_handler("del",
+		[&db](std::string const& key)
+	{
+		try
+		{
+			db.del(key);
+		}
+		catch (std::exception const& e)
+		{
+			throw exception{ error_code::FAIL, e.what() };
+		}
+	});
+
 	return 0;
 }
