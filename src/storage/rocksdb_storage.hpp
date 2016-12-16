@@ -70,13 +70,10 @@ namespace timax { namespace db
 				auto key = itr->value().ToString();
 				auto value = itr->key().ToString();
 				snapshot_serializer::pack(key, value, buffer);
-
 				if (!writer(buffer))
 					return false;
-
 				itr->Next();
 			}
-
 			return true;
 		}
 
@@ -86,24 +83,21 @@ namespace timax { namespace db
 			
 			itr->SeekToFirst();
 			if (!itr->Valid())
-				throw;
-			auto const& begin_key = itr->key();
+				throw std::runtime_error{ "Invalid iterator." };
+			auto begin_key = itr->key();
 
 			itr->SeekToLast();
 			if (!itr->Valid())
-				throw;
-			auto const& end_key = itr->key().ToString();
+				throw std::runtime_error{ "Invalid iterator." };
+			auto end_key = itr->key().ToString();
 
-			db_->DeleteRange(rocksdb::WriteOptions{}, db_->DefaultColumnFamily(), begin_key, end_key);
+			auto s = db_->DeleteRange(rocksdb::WriteOptions{}, db_->DefaultColumnFamily(), begin_key, end_key);
+			if (!s.ok())
+				throw std::runtime_error{ "Failed to clear the rocksdb." };
 
-			uint32_t size;
-			std::string buffer, key, value;
-			while (!in_stream.eof())
+			std::string key, value;
+			while (snapshot_serializer::unpack(in_stream, key, value))
 			{
-				in_stream >> size;
-				buffer.resize(size);
-				in_stream >> buffer;
-				snapshot_serializer::unpack(buffer, key, value);
 				db_->Put(rocksdb::WriteOptions{}, key, value);
 			}
 		}

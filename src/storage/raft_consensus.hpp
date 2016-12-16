@@ -45,7 +45,7 @@ namespace timax { namespace db
 
 		void put_snapshot(int64_t log_index, snapshot_ptr snapshot)
 		{
-			if (log_index < log_index_begin_)
+			if (log_index < log_index_begin_ || nullptr == snapshot)
 				return;
 
 			log_index -= log_index_begin_;
@@ -95,18 +95,13 @@ namespace timax { namespace db
 
 		void put(std::string const& key, std::string const& value)
 		{
-			// check leader
-			if (!raft_.check_leader())
-				throw ;
+			check_leader();
 
 			// serialize 'put' 'key' 'value' to a buffer
 			std::string serialized_log;
 			
 			// replicate the log
-			bool result, log_index;
-			std::tie(result, log_index) = replicate(std::move(serialized_log));
-			if (!result)
-				return;
+			auto log_index = replicate(std::move(serialized_log));
 
 			// we actually commit the key-value
 			storage_.put(key, value);
@@ -120,20 +115,22 @@ namespace timax { namespace db
 
 		std::string get(std::string const& key)
 		{
-			// check leader
-			if (!raft_.check_leader())
-				return;
+			check_leader();
+			return storage_.get(key);
 		}
 
 		void del(std::string const& key)
 		{
-			// check leader
-			if (!raft_.check_leader())
-				return;
+			check_leader();
+			std::string serialized_log;
+			replicate(std::move(serialized_log));
+			storage_.del(key);
+
+			// no need for del to write snapshot?
 		}
 
 	private:
-		std::tuple<bool, int64_t> replicate(std::string&& data)
+		int64_t replicate(std::string&& data)
 		{
 			semaphore s;
 			bool result;
@@ -147,7 +144,16 @@ namespace timax { namespace db
 			});
 
 			s.wait();
-			return std::make_tuple(result, log_index);
+			if (!result)
+				throw std::runtime_error{ "Failed to replicate log." };
+
+			return log_index;
+		}
+
+		void check_leader()
+		{
+			if (!raft_.check_leader())
+				throw std::runtime_error{ "Not a leader" };
 		}
 
 		bool write_snapshot(std::function<bool(const std::string &)> const& writer, int64_t log_index)

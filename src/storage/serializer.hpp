@@ -54,5 +54,27 @@ namespace timax { namespace db
 			value.resize(size_value);
 			std::memcpy(&value[0], work_ptr, size_value);
 		}
+
+		static bool unpack(std::ifstream& in_stream, std::string& key, std::string& value)
+		{
+			if (in_stream.eof())
+				return false;
+
+			uint32_t size;
+			in_stream >> size;
+			if (0 == size)
+				return false;
+
+			key.resize(size);
+			in_stream.read(&key[0], size);
+
+			in_stream >> size;
+			if (0 == size)
+				return false;
+
+			value.resize(size);
+			in_stream.read(&value[0], size);
+			return true;
+		}
 	};
 } }
