@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros">
+    <RestRPCDir>D:\programming\timax\rest_rpc</RestRPCDir>
+    <RocksDBDir>D:\programming\dev_env\rocksdb</RocksDBDir>
+  </PropertyGroup>
+  <PropertyGroup />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(RestRPCDir);$(RestRPCDir)/Kapok;$(RestRPCDir)/Kapok/fmt;$(RestRPCDir)/msgpack/include;$(RestRPCDir)/spdlog/include;$(RestRPCDir)/thread-pool-cpp/thread_pool;$(RocksDBDir)/include;../../src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(RocksDBDir)/build/$(Configuration)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>rocksdblib.lib;Rpcrt4.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <BuildMacro Include="RestRPCDir">
+      <Value>$(RestRPCDir)</Value>
+    </BuildMacro>
+    <BuildMacro Include="RocksDBDir">
+      <Value>$(RocksDBDir)</Value>
+    </BuildMacro>
+  </ItemGroup>
+</Project>
