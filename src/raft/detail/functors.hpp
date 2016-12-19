@@ -58,7 +58,7 @@ namespace fs
 	{
 		bool operator()(const std::string &filepath)
 		{
-			return !!DeleteFile(filepath.c_str());
+			return !!DeleteFileA(filepath.c_str());
 		}
 	};
 
