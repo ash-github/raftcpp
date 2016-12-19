@@ -1,14 +1,16 @@
 #pragma once
 #include <random>
 
-using seq_list_type = timax::db::sequence_list<int>;
+using seq_list_type = timax::db::sequence_list<int const*>;
 
 void test_put_in_order()
 {
-	seq_list_type list;
+	int a = 0;
+	int const* ptr = &a;
+	seq_list_type list{ [](int const* ptr) {} };
 	for (size_t loop = 1ul; loop < 2000ul; ++loop)
 	{
-		list.put_snapshot(loop, 1);
+		list.put_snapshot(loop, ptr);
 		if (loop > seq_list_type::array_size * seq_list_type::max_array_count)
 		{
 			auto r = list.get_begin_log_index();

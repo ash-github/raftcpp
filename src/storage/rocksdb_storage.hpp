@@ -43,9 +43,14 @@ namespace timax { namespace db
 			return value;
 		}
 
-		snapshot_ptr get_snapshot() const
+		snapshot_ptr get_snapshot()
 		{
 			return db_->GetSnapshot();
+		}
+
+		void release_snapshot(snapshot_ptr snapshot)
+		{
+			db_->ReleaseSnapshot(snapshot);
 		}
 
 		bool write_snapshot(snapshot_ptr snapshot, std::function<bool(std::string const&)> const& writer)
@@ -67,8 +72,8 @@ namespace timax { namespace db
 			while (itr->Valid())
 			{
 				std::string buffer;
-				auto key = itr->value().ToString();
-				auto value = itr->key().ToString();
+				auto key = itr->key().ToString();
+				auto value = itr->value().ToString();
 				snapshot_serializer::pack(key, value, buffer);
 				if (!writer(buffer))
 					return false;

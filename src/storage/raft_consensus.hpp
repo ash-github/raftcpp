@@ -16,10 +16,20 @@ namespace timax { namespace db
 		using array_type = std::array<snapshot_ptr, array_size>;
 
 	public:
-		sequence_list()
+		template <typename F>
+		explicit sequence_list(F&& func)
 			: snapshot_blocks_(1)
 			, log_index_begin_(1)
+			, release_func_(std::forward<F>(func))
 		{
+		}
+
+		~sequence_list()
+		{
+			for (auto& block : snapshot_blocks_)
+			{
+				release(block);
+			}
 		}
 
 		snapshot_ptr get_snapshot(int64_t log_index) const
@@ -45,7 +55,7 @@ namespace timax { namespace db
 
 		void put_snapshot(int64_t log_index, snapshot_ptr snapshot)
 		{
-			if (log_index < log_index_begin_ || NULL == snapshot)
+			if (log_index < log_index_begin_ || nullptr == snapshot)
 				return;
 
 			auto log_idx = log_index - log_index_begin_;
@@ -68,6 +78,7 @@ namespace timax { namespace db
 
 			while (advance >= max_array_count)
 			{
+				release(snapshot_blocks_.front());
 				snapshot_blocks_.pop_front();
 				log_index_begin_ += array_size;
 				--advance;
@@ -85,8 +96,21 @@ namespace timax { namespace db
 		}
 
 	private:
-		std::list<array_type>		snapshot_blocks_;
-		int64_t					log_index_begin_;
+		void release(array_type& snapshots)
+		{
+			for (auto snapshot : snapshots)
+			{
+				if (nullptr != snapshot)
+				{
+					release_func_(snapshot);
+				}
+			}
+		}
+
+	private:
+		std::list<array_type>				snapshot_blocks_;
+		int64_t							log_index_begin_;
+		std::function<void(snapshot_ptr)>	release_func_;
 	};
 
 	template <typename StoragePolicy>
@@ -100,6 +124,7 @@ namespace timax { namespace db
 	public:
 		raft_consensus(storage_policy& storage)
 			: storage_(storage)
+			, snapshot_blocks_([this](snapshot_ptr snapshot) { storage_.release_snapshot(snapshot); })
 		{
 		}
 
