@@ -30,7 +30,21 @@ namespace detail
 		~metadata()
 		{
 			max_log_file_ = 0;
-			try_make_snapshot();
+			make_snapshot();
+		}
+		void clear()
+		{
+			std::lock_guard<mutex> lock(mtx_);
+			string_map_.clear();
+			integral_map_.clear();
+			log_.close();
+			std::vector<std::string> files = functors::fs::ls_files()(path_);
+			if (files.empty())
+				return;
+			for (auto &itr: files)
+			{
+				functors::fs::rm()(itr);
+			}
 		}
 		bool init(const std::string &path)
 		{
@@ -52,7 +66,7 @@ namespace detail
 			std::lock_guard<mutex> lock(mtx_);
 			if (!write_log(build_log(key, value, op::e_set)))
 				return false;
-			string_map_[key] = value;
+			integral_map_[key] = value;
 			return true;
 		}
 		bool del(const std::string &key)
@@ -88,7 +102,26 @@ namespace detail
 			value = itr->second;
 			return true;
 		}
-		
+		bool write_snapshot(const std::function<bool(const std::string &)>& writer)
+		{
+			std::lock_guard<mutex> lock(mtx_);
+			for (auto &itr : string_map_)
+			{
+				std::string log = build_log(itr.first, itr.second, op::e_set);
+				uint8_t buf[sizeof(uint32_t)];
+				uint8_t *ptr = buf;
+				endec::put_uint32(ptr, (uint32_t)log.size());
+				if (!writer(std::string((char*)buf, sizeof(buf))))
+					return false;
+				if (!writer(log))
+					return false;
+			}
+			return true;
+		}
+		void load_snapshot(std::ifstream &file)
+		{
+			load_fstream(file);
+		}
 	private:
 		std::string build_log(const std::string &key, const std::string &value,op _op)
 		{
@@ -251,7 +284,7 @@ namespace detail
 			if (!file.good())
 			{
 				//process error
-				return false;
+				return true;
 			}
 			auto ret = load_fstream(file);
 			file.close();
@@ -261,6 +294,10 @@ namespace detail
 		{
 			if ((int)max_log_file_ > log_.tellp())
 				return true;
+			return make_snapshot();
+		}
+		bool make_snapshot()
+		{
 			std::ofstream file;
 			int mode = std::ios::binary |
 				std::ios::trunc |
@@ -301,10 +338,14 @@ namespace detail
 		bool reopen_log(bool trunc = true)
 		{
 			log_.close();
-			int mode = std::ios::binary | std::ios::out | std::ios::ate;
+			int mode = std::ios::binary | std::ios::out ;
 			if (trunc)
 				mode |= std::ios::trunc;
+			else
+				mode |= std::ios::app;
+
 			log_.open(get_log_file().c_str(), mode);
+			touch_metadata_file();
 			return log_.good();
 		}
 		bool touch_metadata_file()
@@ -340,7 +381,7 @@ namespace detail
 		}
 		std::string get_log_file()
 		{
-			return path_ + std::to_string(index_) + ".log";
+			return path_ + std::to_string(index_) + ".Log";
 		}
 		std::string get_metadata_file()
 		{
@@ -352,13 +393,13 @@ namespace detail
 		}
 		std::string get_old_log_file()
 		{
-			return path_ + std::to_string(index_ - 1) + ".log";
+			return path_ + std::to_string(index_ - 1) + ".Log";
 		}
 		std::string get_old_metadata_file()
 		{
 			return path_ + std::to_string(index_ - 1) + ".metadata";
 		}
-		uint64_t index_ = 0;
+		uint64_t index_ = 1;
 		std::size_t max_log_file_ = 10 * 1024 * 1024;
 		std::ofstream log_;
 		std::string path_;

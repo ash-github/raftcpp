@@ -10,8 +10,25 @@ namespace fs
 	{
 		bool operator()(const std::string &dir)
 		{
-			return !!CreateDirectory(dir.c_str(), NULL) || 
-				ERROR_ALREADY_EXISTS == GetLastError();
+			std::size_t offset = 0;
+			do {
+
+				auto pos = dir.find_first_of('\\', offset);
+				if (pos == std::string::npos)
+					pos = dir.find_first_of('/',offset);
+				if (pos == std::string::npos)
+				{
+					return !!CreateDirectory(dir.c_str(), NULL) || ERROR_ALREADY_EXISTS == GetLastError();
+				}
+				else {
+					auto child = dir.substr(0, pos);
+					offset = pos+1;
+					if (!!CreateDirectory(child.c_str(), NULL) || ERROR_ALREADY_EXISTS == GetLastError())
+						continue;
+					return false;
+				}
+			} while (true);
+			
 		}
 	};
 	struct ls_files
@@ -41,7 +58,7 @@ namespace fs
 	{
 		bool operator()(const std::string &filepath)
 		{
-			return !!DeleteFileA(filepath.c_str());
+			return !!DeleteFile(filepath.c_str());
 		}
 	};
 

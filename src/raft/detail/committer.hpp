@@ -35,7 +35,7 @@ namespace xraft
 				if (queue_.empty())
 				{
 					 auto res = cv_.wait_for(lock,std::chrono::milliseconds(1000));
-					 if (res == std::cv_status::timeout)
+					 if (res == std::cv_status::timeout || queue_.empty())
 						 return false;
 				}
 				_item = std::move(queue_.front());

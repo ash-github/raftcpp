@@ -24,7 +24,7 @@ namespace xraft
 
 		struct log_entry
 		{
-			enum type:char
+			enum type
 			{
 				e_append_log,
 				e_configuration
@@ -33,13 +33,15 @@ namespace xraft
 			int64_t term_ = 0;
 			uint8_t type_ = type::e_append_log;
 			std::string log_data_;
+
 			META(index_, term_, type_, log_data_);
+
 			std::size_t bytes() const
 			{
 				return
 					endec::get_sizeof(index_) +
 					endec::get_sizeof(term_) +
-					endec::get_sizeof(type_) +
+					endec::get_sizeof(std::underlying_type<type>::type()) +
 					endec::get_sizeof(log_data_);
 			}
 			std::string to_string() const
@@ -49,7 +51,7 @@ namespace xraft
 				uint8_t *ptr = (uint8_t*)buffer.data();
 				endec::put_uint64(ptr, index_);
 				endec::put_uint64(ptr, term_);
-				endec::put_uint8(ptr, type_);
+				endec::put_uint8(ptr, static_cast<uint8_t>(type_));
 				endec::put_string(ptr, log_data_);
 				return buffer;
 			}
@@ -61,7 +63,16 @@ namespace xraft
 					return false;
 				index_ = (int64_t)endec::get_uint64(ptr);
 				term_ = (int64_t)endec::get_uint64(ptr);
-				type_ = (type)endec::get_uint8(ptr);
+				type_ = endec::get_uint8(ptr);
+				log_data_ = endec::get_string(ptr);
+				return true;
+			}
+			bool from_string(uint8_t *&ptr)
+			{
+				log_data_.clear();
+				index_ = (int64_t)endec::get_uint64(ptr);
+				term_ = (int64_t)endec::get_uint64(ptr);
+				type_ = endec::get_uint8(ptr);
 				log_data_ = endec::get_string(ptr);
 				return true;
 			}
@@ -70,33 +81,46 @@ namespace xraft
 		{
 			struct raft_node
 			{
+				raft_node() {}
+				raft_node(const raft_node &) = default;
+				raft_node(
+					std::string ip,
+					int port,
+					std::string raft_id)
+				{
+					ip_ = ip;
+					port_ = port;
+					raft_id_ = raft_id;
+				}
 				std::string ip_;
 				int port_ = 0;
 				std::string raft_id_;
-				META(ip_, port_, raft_id_);
 			};
-			
 			using nodes = std::vector<raft_node>;
-			nodes nodes_;
+			nodes peers_;
 			raft_node myself_;
 			std::size_t append_log_timeout_;
 			std::size_t election_timeout_;
+			std::size_t heartbeat_interval_;
 			std::string raftlog_base_path_;
 			std::string snapshot_base_path_;
 			std::string metadata_base_path_;
-
-			META(nodes_, myself_, append_log_timeout_, election_timeout_, raftlog_base_path_, snapshot_base_path_, metadata_base_path_);
 		};
 		struct append_entries_request
 		{
 			int64_t term_ = 0;
-			std::string leader_id_ = 0;
+			std::string leader_id_;
 			int64_t prev_log_index_ = 0;
 			int64_t prev_log_term_ = 0;
 			int64_t leader_commit_ = 0;
 			std::list<log_entry>entries_;
 
-			META(term_, leader_id_, prev_log_index_, prev_log_term_, leader_commit_, entries_);
+			META(term_,
+				leader_id_, 
+				prev_log_index_, 
+				prev_log_term_, 
+				leader_commit_, 
+				entries_);
 		};
 
 		struct append_entries_response
@@ -118,7 +142,13 @@ namespace xraft
 			std::string leader_id_;
 			std::string data_;
 
-			META(term_, last_snapshot_index_, last_included_term_, offset_, done_, leader_id_, data_);
+			META(term_,
+				last_snapshot_index_, 
+				last_included_term_, 
+				offset_, 
+				done_, 
+				leader_id_, 
+				data_);
 		};
 
 		struct install_snapshot_response

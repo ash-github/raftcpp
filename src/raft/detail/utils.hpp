@@ -33,6 +33,21 @@ namespace detail
 			std::queue<T> queue_;
 			std::mutex mtx_;
 		};
+
+		struct guard
+		{
+			guard(std::function<void()> &&func)
+				:func_(std::move(func))
+			{
+
+			}
+			~guard()
+			{
+				if (func_)
+					func_();
+			}
+			std::function<void()> func_;
+		};
 	}
 }
 }
