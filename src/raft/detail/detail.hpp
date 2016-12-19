@@ -15,6 +15,11 @@
 #include <stdio.h>
 #include <algorithm>  
 #include <atomic>
+#include <random>
+
+//deps
+#include <rest_rpc/rpc.hpp>
+
 #ifdef _MSC_VER
 #include<windows.h> 
 #endif

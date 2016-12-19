@@ -10,7 +10,11 @@ namespace xraft
 			timer()
 				
 			{
-				checker_ = std::thread([this] { run(); });
+				
+			}
+			~timer()
+			{
+				stop();
 			}
 			int64_t set_timer(int64_t timeout, std::function<void()> &&callback)
 			{
@@ -37,34 +41,39 @@ namespace xraft
 					}
 				}
 			}
+			void start()
+			{
+				checker_ = std::thread([this] { run(); });
+				checker_.detach();
+			}
 			void stop()
 			{
 				stop_ = false;
+				cv_.notify_one();
 			}
 		private:
 			void run()
 			{
-				do 
+				while (!stop_)
 				{
 					std::unique_lock<std::mutex> lock(mtx_);
 					if (actions_.empty())
 					{
-						cv_.wait_for(lock, std::chrono::milliseconds(100));
+						cv_.wait_for(lock, std::chrono::milliseconds(500));
 						continue;
 					}
 					auto itr = actions_.begin();
 					auto timeout_point = itr->first;
 					if (timeout_point > high_resolution_clock::now())
 					{
-						cv_.wait_until(lock, timeout_point, [this] {
-							return !!actions_.size(); 
-						});
+						cv_.wait_until(lock, timeout_point);
 						continue;
 					}
 					auto action = std::move(itr->second.second);
+					actions_.erase(itr);
 					lock.unlock();
 					action();
-				} while (!stop_);
+				}
 			}
 			int64_t gen_timer_id()
 			{

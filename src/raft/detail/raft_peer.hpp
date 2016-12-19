@@ -1,34 +1,40 @@
-#pragma once	
-#include <rest_rpc/client.hpp>
+#pragma once
+#define TRACE std::cout <<__FUNCTION__ <<std::endl;
 namespace xraft
 {
 namespace detail
 {
 	using namespace std::chrono;
-	namespace rpc_client
+
+	namespace RPC
 	{
-		TIMAX_DEFINE_PROTOCOL(rpc_append_entries_request, append_entries_response(append_entries_request));
-		TIMAX_DEFINE_PROTOCOL(rpc_vote_request, vote_response (vote_request));
-		TIMAX_DEFINE_PROTOCOL(rpc_install_snapshot, install_snapshot_response(install_snapshot_request));
+		TIMAX_DEFINE_PROTOCOL(append_entries_request, detail::append_entries_response(detail::append_entries_request));
+		TIMAX_DEFINE_PROTOCOL(vote_request, detail::vote_response(detail::vote_request));
+		TIMAX_DEFINE_PROTOCOL(install_snapshot, detail::install_snapshot_response(detail::install_snapshot_request));
 	}
+
 	class raft_peer
 	{
 		
 	public:
-		using async_client_t = timax::rpc::async_client<timax::rpc::msgpack_codec>;
-
 		enum class cmd_t
 		{
 			e_connect,
 			e_election,
 			e_append_entries,
+			e_interrupt_vote,
 			e_sleep,
 			e_exit,
 
 		};
-		raft_peer()
-			:peer_thread_([this] { run(); })
+		raft_peer(detail::raft_config::raft_node node)
+			:myself_(node)
 		{
+
+		}
+		~raft_peer()
+		{
+			stop();
 		}
 		void send_cmd(cmd_t cmd)
 		{
@@ -40,11 +46,15 @@ namespace detail
 			utils::lock_guard locker(mtx_);
 			cv_.notify_one();
 		}
-		void interrupt()
+		void start()
 		{
-			std::lock_guard<std::mutex> loker(cannel_rpc_mtx_);
-			if(cannel_rpc_)
-				cannel_rpc_();
+			peer_thread_ = std::thread([this] {  run(); });
+			peer_thread_.detach();
+		}
+		void stop()
+		{
+			stop_ = true;
+			notify();
 		}
 		std::function<void(raft_peer&, bool)> connect_callback_;
 		std::function<int64_t(void)> get_current_term_;
@@ -55,79 +65,24 @@ namespace detail
 		std::function<void(int64_t)> new_term_callback_;
 		std::function<void(const std::vector<int64_t>&)> append_entries_success_callback_;
 		std::function<std::string()> get_snapshot_path_;
+		std::string raft_id_;
 		raft_config::raft_node myself_;
-		std::int64_t heatbeat_inteval_;
-		std::string leader_id_;
 	private:
-		
 		void run()
 		{
 			do
 			{
 				if (!try_execute_cmd())
 				{
-					do_sleep();
+					do_sleep(1000);
 				}
-			} while (stop_);
-		}
-		bool do_install_snapshot()
-		{
-			std::string filepath = get_snapshot_path_();
-			if (filepath.empty())
-				return false;
-			snapshot_header header;
-			snapshot_reader reader;
-			reader.open(filepath);
-			check_apply(reader.read_sanpshot_head(header));
-			std::ifstream &file = reader.get_snapshot_stream();
-			file.seekg(0, std::ios::beg);
-
-			const int buffer_length = 102400;
-			std::unique_ptr<char[]> buffer;
-			buffer.reset(new char[buffer_length]);
-			install_snapshot_request request;
-			do
-			{
-				request.term_ = get_current_term_();
-				request.offset_ = file.tellg();
-				request.last_included_term_ = header.last_included_term_;
-				request.last_snapshot_index_ = header.last_included_index_;
-				request.leader_id_ = leader_id_;
-
-				file.read(buffer.get(), buffer_length);
-				request.data_.clear();
-				request.data_.append(buffer.get(), file.gcount());
-				request.done_ = file.eof();
-				try
-				{
-					auto rpc_task = rpc_client_.call(endpoint_, rpc_client::rpc_install_snapshot, request);
-					save_rpc_task(rpc_task);
-					auto response = rpc_task.get();
-
-					if (response.term_ > request.term_)
-					{
-						new_term_callback_(response.term_);
-						return false;
-					}
-					else if (response.bytes_stored_ == 0)
-					{
-						std::cout << "response.bytes_stored_  == 0" << std::endl;
-						return false;
-					}
-				}
-				catch (const std::exception& e)
-				{
-					std::cout << e.what() << std::endl;
-					return false;
-				}
-			} while (!request.done_);
-			return true;
+			} while (!stop_);
 		}
 		void do_append_entries()
 		{
 			next_index_ = 0;
 			match_index_ = 0;
-			bool send_heartbeat = false;
+			send_heartbeat_ = false;
 			do
 			{
 				try
@@ -135,60 +90,125 @@ namespace detail
 					if (try_execute_cmd())
 						break;
 					int64_t index = get_last_log_index_();
-					if (index == match_index_ )
-					{
-						send_heartbeat = true;
-						do_sleep(next_heartbeat_delay());
-					}
-					if (!next_index_)
+					if (!next_index_ || next_index_ > index)
 						next_index_ = index;
-					auto request = build_append_entries_request_(next_index_);
-					if (request.entries_.empty() && send_heartbeat == false)
+					if (index == match_index_ && send_heartbeat_)
 					{
-						do_install_snapshot();
+						send_heartbeat_ = false;
+						do_sleep(next_heartbeat_delay());
+						continue;
+					}
+					auto request = build_append_entries_request_(next_index_);
+					if (request.entries_.empty() && next_index_ < index)
+					{
+						send_install_snapshot_req();
 						continue;
 					}
 					auto response = send_append_entries_request(request);
 					update_heartbeat_time();
 					if (!response.success_)
 					{
+						match_index_ = 0;
 						if (get_current_term_() < response.term_)
 						{
 							new_term_callback_(response.term_);
 							return;
 						}
-						--next_index_;
+						next_index_ = response.last_log_index_ + 1;
+						if (next_index_ == 0)
+							next_index_ = 1;
 						continue;
 					}
+					match_index_ = response.last_log_index_;
+					next_index_ = match_index_ + 1;
+
+					if (request.entries_.empty())
+						continue;
+
 					std::vector<int64_t> indexs;
 					indexs.reserve(request.entries_.size());
 					for (auto &itr : request.entries_)
 						indexs.push_back(itr.index_);
 					append_entries_success_callback_(indexs);
-					match_index_ = response.last_log_index_;
-					next_index_ = match_index_ + 1;
 				}
 				catch (std::exception &e)
 				{
 					std::cout << e.what() << std::endl;
-					break;
 				}
 			} while (true);
 		}
+
 		append_entries_response 
-			send_append_entries_request(const append_entries_request &req ,int timeout = 10000)
+			send_append_entries_request(const append_entries_request &req)
 		{
-			auto result = rpc_client_.call(endpoint_, rpc_client::rpc_append_entries_request, req)
-				.timeout(std::chrono::milliseconds(timeout));
-			save_rpc_task(result);
-			return std::move(result.get());
+			return rpc_client_.call(endpoint_, RPC::append_entries_request, req);
+		}
+
+		void send_install_snapshot_req()
+		{
+			snapshot_reader reader;
+			snapshot_head head;
+
+			auto filepath = get_snapshot_path_();
+			if (!reader.open(filepath))
+			{
+				std::cout << "open file :" + filepath << " error" << std::endl;
+				return;
+			}
+			if (!reader.read_sanpshot_head(head))
+				throw std::runtime_error("read_sanpshot_head failed");
+
+			std::ifstream &file = reader.get_snapshot_stream();
+			file.seekg(0, std::ios::beg);
+			do
+			{
+				if (try_execute_cmd())
+					break;
+				install_snapshot_request request;
+				request.term_ = get_current_term_();
+				request.leader_id_ = raft_id_;
+				request.last_included_term_ = head.last_included_term_;
+				request.last_snapshot_index_ = head.last_included_index_;
+				request.offset_ = file.tellg();
+				std::cout << "request.offset_: " << request.offset_ << std::endl;
+				request.data_.resize(1024*1024);
+				file.read((char*)request.data_.data(), request.data_.size());
+				request.data_.resize(file.gcount());
+				request.done_ = file.eof();
+				try
+				{
+
+					auto resp = rpc_client_.call(endpoint_, RPC::install_snapshot,  request);
+					if (resp.term_ > request.term_)
+					{
+						new_term_callback_(resp.term_);
+						return;
+					}
+					else if (resp.bytes_stored_ != 
+							request.offset_ + request.data_.size())
+					{
+						file.clear(file.goodbit);
+						file.seekg(resp.bytes_stored_, std::ios::beg);
+					}
+					else if (request.done_)
+					{
+						std::cout << "send snapshot done " << std::endl;
+						match_index_ = head.last_included_index_;
+						next_index_ = match_index_ + 1;
+						break;
+					}
+				}
+				catch (const std::exception& e)
+				{
+					throw e;
+				}
+
+			} while (!stop_);
 		}
 		int64_t next_heartbeat_delay()
 		{
-			auto delay = duration_cast<milliseconds>(high_resolution_clock::now() - last_heart_beat_).count();
-			if (heatbeat_inteval_ > delay)
-				return heatbeat_inteval_ - delay;
-			return 0;
+			auto delay = high_resolution_clock::now() - last_heart_beat_;
+			return std::abs(heatbeat_inteval_ - duration_cast<milliseconds>(delay).count());
 		}
 		bool try_execute_cmd()
 		{
@@ -216,51 +236,56 @@ namespace detail
 			}
 			return true;
 		}
-		void do_sleep(int64_t milliseconds = INT64_MAX)
+		void do_sleep(int64_t milliseconds = 0)
 		{
 			std::unique_lock<std::mutex> lock(mtx_);
-			if(milliseconds > 0)
-				cv_.wait_for(lock, std::chrono::milliseconds(milliseconds));
+			if(!milliseconds)
+				cv_.wait(lock, [this] { 
+				return get_last_log_index_() != match_index_; });
+			else {
+				cv_.wait_for(lock, std::chrono::milliseconds(milliseconds), 
+					[this] { return get_last_log_index_() != match_index_; });
+			}
 		}
 		
 		void update_heartbeat_time()
 		{
 			last_heart_beat_ = high_resolution_clock::now();
+			send_heartbeat_ = true;
 		}
 		void do_connect()
 		{
-			endpoint_ = timax::rpc::get_tcp_endpoint(myself_.ip_, boost::lexical_cast<uint16_t>(myself_.port_));
-			connect_callback_(*this, true);
+			endpoint_ = timax::rpc::get_tcp_endpoint(myself_.ip_,
+				boost::lexical_cast<uint16_t>(myself_.port_));
 		}
 		void do_election()
 		{
-			auto request = build_vote_request_();
+			int faileds = 3;
+			if (faileds == 0)
+				return;
+			auto req = build_vote_request_();
 			try
 			{
-				auto result = rpc_client_.call(endpoint_, rpc_client::rpc_vote_request, request);
-				save_rpc_task(result);
-				vote_response_callback_(result.get());
+				auto resp = rpc_client_.call(endpoint_, RPC::vote_request,req);
+				vote_response_callback_(resp);
 			}
 			catch (const std::exception& e)
 			{
 				std::cout << e.what() << std::endl;
 			}
 		}
-		template<typename T>
-		void save_rpc_task(T const& result)
-		{
-			std::lock_guard<std::mutex> loker(cannel_rpc_mtx_);
-			cannel_rpc_ = [r = result]() mutable { r.cancel(); };
-		}
-		
+
 		void do_exist()
 		{
 			stop_ = true;
 		}
+		std::int64_t heatbeat_inteval_ = 1000;
+		using sync_client = timax::rpc::sync_client<timax::rpc::msgpack_codec>;
 
+		boost::asio::ip::tcp::endpoint endpoint_;
+		sync_client rpc_client_;
 		high_resolution_clock::time_point last_heart_beat_;
 		bool stop_ = false;
-		std::thread peer_thread_;
 		std::mutex mtx_;
 		std::condition_variable cv_;
 
@@ -270,12 +295,9 @@ namespace detail
 		int64_t match_index_ = 0;
 		int64_t next_index_ = 0;
 
+		bool send_heartbeat_ = false;
 		cmd_t cmd_;
-
-		boost::asio::ip::tcp::endpoint endpoint_;
-		std::mutex cannel_rpc_mtx_;
-		async_client_t rpc_client_;
-		std::function<void()> cannel_rpc_;
+		std::thread peer_thread_;
 	};
 }
 }

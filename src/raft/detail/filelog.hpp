@@ -48,11 +48,12 @@ namespace detail
 			uint32_t len = (uint32_t)data.size();
 			data_file_.write(reinterpret_cast<char*>(&len), sizeof len);
 			data_file_.write(data.data(), data.size());
-			data_file_.flush();
+			data_file_.sync();
 			check_apply(data_file_.good());
 			index_file_.write(reinterpret_cast<char*>(&index), sizeof(index));
 			index_file_.write(reinterpret_cast<char*>(&file_pos), sizeof(file_pos));
-			index_file_.flush();
+			index_file_.sync();
+			last_log_index_ = index;
 			check_apply(index_file_.good());
 			return true;
 		}
@@ -62,8 +63,6 @@ namespace detail
 			std::list<log_entry> &log_entries,
 			std::unique_lock<std::mutex> &lock)
 		{
-			assert(index);
-			assert(count);
 			std::lock_guard<std::mutex> lock_guard(mtx_);
 			lock.unlock();
 			int64_t data_file_offset = 0;
@@ -75,7 +74,12 @@ namespace detail
 				uint32_t len;
 				data_file_.read((char*)&len, sizeof(uint32_t));
 				if (!data_file_.good())
-					return data_file_.eof();
+				{
+					bool ret = data_file_.eof();
+					data_file_.clear(data_file_.goodbit);
+					data_file_.seekp(0, std::ios::end);
+					return ret;
+				}
 				std::string buffer;
 				buffer.resize(len);
 				data_file_.read((char*)buffer.data(), len);
@@ -174,16 +178,17 @@ namespace detail
 		}
 		int64_t get_last_log_index()
 		{
-			std::lock_guard<std::mutex> lock(mtx_);
 			if (last_log_index_ == -1)
 			{
+				std::lock_guard<std::mutex> lock(mtx_);
 				index_file_.seekg(-(int32_t)(sizeof(int64_t) * 2), std::ios::end);
 				index_file_.read((char*)&last_log_index_, sizeof(last_log_index_));
 				index_file_.seekp(0, std::ios::end);
-				if (index_file_.gcount() != sizeof(last_log_index_))
+				if (index_file_.gcount() != sizeof(last_log_index_) || !index_file_.good())
 				{
+					index_file_.clear(index_file_.goodbit);
 					last_log_index_ = -1;
-					return -1;
+					return 0;
 				}
 			}
 			return last_log_index_;
@@ -237,7 +242,10 @@ namespace detail
 			int64_t index_buffer_;
 			index_file_.read((char*)&index_buffer_, sizeof(int64_t));
 			if (!index_file_.good())
+			{
+				index_file_.clear(index_file_.goodbit);
 				return false;
+			}
 			if (index_buffer_ != index)
 				//todo log error.
 				return false;
@@ -265,7 +273,10 @@ namespace detail
 				index_file_.read(buffer, sizeof(buffer));
 				index_file_.seekp(0, std::ios::end);
 				if (index_file_.gcount() != sizeof(buffer))
-					return -1;
+				{
+					index_file_.clear(index_file_.goodbit);
+					return 0;
+				}
 				log_index_start_ = *(int64_t*)(buffer);
 			}
 			return log_index_start_;
@@ -327,16 +338,24 @@ namespace detail
 		bool write(detail::log_entry &&entry, int64_t &index)
 		{
 			std::lock_guard<std::mutex> lock(mtx_);
-			++last_index_;
-			index = last_index_;
-			entry.index_ = last_index_;
+			if (entry.index_)
+			{
+				last_index_ = entry.index_;
+			}
+			else
+			{
+				++last_index_;
+				index = last_index_;
+				entry.index_ = last_index_;
+			}
 			std::string buffer = entry.to_string();
 			log_entries_cache_size_ += buffer.size();
 			log_entries_cache_.emplace_back(std::move(entry));
 			check_log_entries_size();
 			if (!current_file_.is_open())
-				check_apply(current_file_.open(
-					path_ + std::to_string(entry.index_) + ".log"));
+			{
+				current_file_.open(path_ + std::to_string(entry.index_) + ".log");
+			}
 			check_apply(current_file_.write(last_index_, std::move(buffer)));
 			check_current_file_size();
 			return true;
@@ -346,9 +365,12 @@ namespace detail
 			std::lock_guard<std::mutex> lock(mtx_);
 			if (get_entry_from_cache(entry, index))
 				return true;
-			if (current_file_.get_log_start() <= index &&
+			if (current_file_.is_open() && 
+				current_file_.get_log_start() <= index &&
 				index <= current_file_.get_last_log_index())
+			{
 				return current_file_.get_entry(index, entry);
+			}
 			for (auto itr = logfiles_.begin(); itr != logfiles_.end(); ++itr)
 			{
 				auto &f = itr->second;
@@ -360,15 +382,7 @@ namespace detail
 		}
 		std::list<log_entry> get_log_entries(int64_t index, std::size_t count = 10)
 		{
-			assert(index);
-			assert(count);
 			std::unique_lock<std::mutex> lock(mtx_);
-			if (logfiles_.size())
-			{
-				if (index < logfiles_.begin()->second.get_log_start() ||
-					index > logfiles_.rbegin()->second.get_last_log_index())
-					return{};
-			}
 			std::list<log_entry> log_entries;
 			get_entries_from_cache(log_entries, index, count);
 			if (count == 0)
@@ -391,7 +405,8 @@ namespace detail
 			get_entries_from_cache(log_entries, index, count);
 			if (count == 0)
 				return std::move(log_entries);
-			if (index <= current_file_.get_last_log_index() &&
+			if (current_file_.is_open() && 
+				index <= current_file_.get_last_log_index() &&
 				current_file_.get_log_start() <= index)
 			{
 				if (!current_file_.get_log_entries(index, count, log_entries, lock))
@@ -429,19 +444,16 @@ namespace detail
 				}
 				++itr;
 			}
-			if (index == current_file_.get_last_log_index())
+			if (current_file_.is_open() && index == current_file_.get_last_log_index())
 			{
 				current_file_.rm();
 			}
-			else if (current_file_.get_log_start() <= index &&
-				index < current_file_.get_last_log_index())
+			else if ( current_file_.is_open () && 
+						current_file_.get_log_start() <= index &&
+						index < current_file_.get_last_log_index())
 			{
 				current_file_.truncate_prefix(index);
 			}
-			if (current_file_.is_open())
-				last_index_ = current_file_.get_last_log_index();
-			else
-				last_index_ = index;
 		}
 		void truncate_suffix(int64_t index)
 		{
@@ -460,10 +472,17 @@ namespace detail
 				{
 					itr->second.truncate_suffix(index);
 					current_file_.rm();
-					current_file_ = std::move(itr->second);
-					last_index_ = current_file_.get_last_log_index();
-					logfiles_.erase(itr);
-					break;
+					last_index_ = index - 1;
+					if (last_index_ < 0)
+						last_index_ = 0;
+					if (itr->second.get_last_log_index() > 0)
+					{
+						current_file_ = std::move(itr->second);
+						last_index_ = current_file_.get_last_log_index();
+						logfiles_.erase(itr);
+						break;
+					}
+					
 				}
 			}
 			for (auto itr = logfiles_.upper_bound(index); itr != logfiles_.end();)
@@ -477,6 +496,7 @@ namespace detail
 			std::lock_guard<std::mutex> lock(mtx_);
 			if (log_entries_cache_.size())
 				return log_entries_cache_.back().term_;
+			return 0;
 		}
 		int64_t get_last_index()
 		{
@@ -488,16 +508,19 @@ namespace detail
 			std::lock_guard<std::mutex> lock(mtx_);
 			if (logfiles_.size())
 				return logfiles_.begin()->second.get_log_start();
-			else
+			else if(current_file_.is_open())
 				return current_file_.get_log_start();
 			return 0;
+		}
+		void set_make_snapshot_trigger(std::function<void()> callback)
+		{
+			std::lock_guard<std::mutex> lock(mtx_);
+			make_snapshot_trigger_ = callback;
 		}
 	private:
 		bool get_entries_from_cache(std::list<log_entry> &log_entries,
 			int64_t &index, std::size_t &count)
 		{
-			assert(count);
-			assert(index);
 			if (log_entries_cache_.size() && log_entries_cache_.front().index_ <= index)
 			{
 				for (auto &itr : log_entries_cache_)
@@ -546,22 +569,34 @@ namespace detail
 			{
 				logfiles_.emplace(current_file_.get_log_start(),
 					std::move(current_file_));
-				check_apply(current_file_.open(
-					path_ + std::to_string(last_index_ + 1) + ".log"));
+				std::string filepath = path_ + std::to_string(last_index_ + 1) + ".log";
+				check_apply(current_file_.open(filepath));
+				check_make_snapshot_trigger();
 			}
 			return true;
 		}
 
+		void check_make_snapshot_trigger()
+		{
+			if (logfiles_.size() > max_log_file_count_ 
+				&& make_snapshot_trigger_)
+			{
+				make_snapshot_trigger_();
+				make_snapshot_trigger_ = nullptr;
+			}
+		}
 		std::mutex mtx_;
 		std::list<log_entry> log_entries_cache_;
 		std::size_t log_entries_cache_size_ = 0;
-		std::size_t max_cache_size_ = 1024;
-		std::size_t max_file_size_ = 1024;
+		std::size_t max_cache_size_ = 1;
+		std::size_t max_file_size_ = 1024*1024;
 		int64_t last_index_ = 0;
 		std::string path_;
 		file current_file_;
 		int64_t current_file_last_index_ = 0;
 		std::map<int64_t, detail::file> logfiles_;
+		std::size_t max_log_file_count_ = 10;
+		std::function<void()> make_snapshot_trigger_;
 	};
 }
 
