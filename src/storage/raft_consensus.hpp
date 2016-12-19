@@ -18,7 +18,7 @@ namespace timax { namespace db
 	public:
 		sequence_list()
 			: snapshot_blocks_(1)
-			, log_index_begin_(0)
+			, log_index_begin_(1)
 		{
 		}
 
@@ -45,12 +45,12 @@ namespace timax { namespace db
 
 		void put_snapshot(int64_t log_index, snapshot_ptr snapshot)
 		{
-			if (log_index < log_index_begin_ || nullptr == snapshot)
+			if (log_index < log_index_begin_ || NULL == snapshot)
 				return;
 
-			log_index -= log_index_begin_;
-			auto advance = log_index / array_size;
-			log_index -= advance * array_size;
+			auto log_idx = log_index - log_index_begin_;
+			auto advance = log_idx / array_size;
+			log_idx -= advance * array_size;
 
 			auto itr = snapshot_blocks_.begin();
 			if (advance > 0)
@@ -64,14 +64,24 @@ namespace timax { namespace db
 				std::advance(itr, advance);
 			}
 
-			(*itr)[log_index] = snapshot;
+			(*itr)[log_idx] = snapshot;
 
-			while (advance > max_array_count)
+			while (advance >= max_array_count)
 			{
 				snapshot_blocks_.pop_front();
 				log_index_begin_ += array_size;
 				--advance;
 			}
+		}
+
+		size_t block_size() const noexcept
+		{
+			return snapshot_blocks_.size();
+		}
+
+		int64_t get_begin_log_index() const noexcept
+		{
+			return log_index_begin_;
 		}
 
 	private:

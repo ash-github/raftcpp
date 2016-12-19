@@ -82,6 +82,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\..\test\test_db.hpp" />
+    <ClInclude Include="..\..\test\test_sequence_list.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\test\unit_test.cpp" />

@@ -2,6 +2,7 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClInclude Include="..\..\test\test_db.hpp" />
+    <ClInclude Include="..\..\test\test_sequence_list.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\test\unit_test.cpp" />
