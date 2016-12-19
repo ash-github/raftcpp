@@ -126,6 +126,7 @@ namespace timax { namespace db
 			: storage_(storage)
 			, snapshot_blocks_([this](snapshot_ptr snapshot) { storage_.release_snapshot(snapshot); })
 		{
+			init();
 		}
 
 		void put(std::string const& key, std::string const& value)
@@ -156,6 +157,25 @@ namespace timax { namespace db
 		}
 
 	private:
+		void init()
+		{
+			raft_.regist_build_snapshot_callback(
+				[this](auto const& writer, auto log_index)
+			{
+				return write_snapshot(writer, log_index);
+			});
+			raft_.regist_install_snapshot_handle(
+				[this](auto& in_stream)
+			{
+				storage_.install_from_file(in_stream);
+			});
+			raft_.regist_commit_entry_callback(
+				[this](auto&& buffer, auto log_index)
+			{
+				commit_entry(std::move(buffer), log_index);
+			});
+		}
+
 		int64_t replicate(std::string&& data)
 		{
 			semaphore s;
@@ -184,7 +204,7 @@ namespace timax { namespace db
 
 		bool write_snapshot(std::function<bool(const std::string &)> const& writer, int64_t log_index)
 		{
-			return storage_.write_snapshort(snapshot_blocks_.get_snapshot(), writer);
+			return storage_.write_snapshot(snapshot_blocks_.get_snapshot(log_index), writer);
 		}
 
 		void commit_entry(std::string&& buffer, int64_t log_index)
