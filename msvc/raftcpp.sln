@@ -11,6 +11,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{F40739EA-7
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "unit_test", "unit_test\unit_test.vcxproj", "{66D10FA9-B54C-4FE9-AE78-142FF99A2769}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "kvclient", "kvclient\kvclient.vcxproj", "{B6733244-D1E1-4C0D-8F5D-7ED3448F93B0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -29,6 +31,10 @@ Global
 		{66D10FA9-B54C-4FE9-AE78-142FF99A2769}.Debug|x64.Build.0 = Debug|x64
 		{66D10FA9-B54C-4FE9-AE78-142FF99A2769}.Release|x64.ActiveCfg = Release|x64
 		{66D10FA9-B54C-4FE9-AE78-142FF99A2769}.Release|x64.Build.0 = Release|x64
+		{B6733244-D1E1-4C0D-8F5D-7ED3448F93B0}.Debug|x64.ActiveCfg = Debug|x64
+		{B6733244-D1E1-4C0D-8F5D-7ED3448F93B0}.Debug|x64.Build.0 = Debug|x64
+		{B6733244-D1E1-4C0D-8F5D-7ED3448F93B0}.Release|x64.ActiveCfg = Release|x64
+		{B6733244-D1E1-4C0D-8F5D-7ED3448F93B0}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
