@@ -8,7 +8,7 @@
   <PropertyGroup />
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(RestRPCDir);$(RestRPCDir)/Kapok;$(RestRPCDir)/Kapok/fmt;$(RestRPCDir)/msgpack/include;$(RestRPCDir)/spdlog/include;$(RestRPCDir)/thread-pool-cpp/thread_pool;$(RocksDBDir)/include;../../src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(RestRPCDir);$(RestRPCDir)/Kapok;$(RestRPCDir)/Kapok/fmt;$(RestRPCDir)/msgpack/include;$(RestRPCDir)/spdlog/include;$(RestRPCDir)/thread-pool-cpp/thread_pool;$(RocksDBDir)/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(RocksDBDir)/build/$(Configuration)</AdditionalLibraryDirectories>
