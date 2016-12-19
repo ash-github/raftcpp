@@ -12,6 +12,10 @@ namespace xraft
 			{
 				
 			}
+			~timer()
+			{
+				stop();
+			}
 			int64_t set_timer(int64_t timeout, std::function<void()> &&callback)
 			{
 				utils::lock_guard lock(mtx_);
@@ -40,6 +44,7 @@ namespace xraft
 			void start()
 			{
 				checker_ = std::thread([this] { run(); });
+				checker_.detach();
 			}
 			void stop()
 			{

@@ -23,7 +23,7 @@ namespace xraft
 		}
 		~raft()
 		{
-
+			stop();
 		}
 		bool check_leader()
 		{
@@ -58,6 +58,10 @@ namespace xraft
  			set_election_timer();
 		}
 	private:
+		void stop()
+		{
+			rpc_server_->stop();
+		}
 		void init_raft_log()
 		{
 			if (!log_.init(filelog_base_path_))

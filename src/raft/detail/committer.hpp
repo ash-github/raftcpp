@@ -11,6 +11,7 @@ namespace xraft
 			{
 				worker_ = std::thread([this] { 
 					run(); });
+				worker_.detach();
 			}
 			~committer()
 			{
@@ -24,9 +25,9 @@ namespace xraft
 			}
 			void stop()
 			{
+				std::unique_lock<std::mutex> lock(mtx_);
 				is_stop_ = true;
-				if (worker_.joinable())
-					worker_.join();
+				cv_.notify_one();
 			}
 		private:
 			bool pop(item &_item)

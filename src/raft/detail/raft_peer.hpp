@@ -32,6 +32,10 @@ namespace detail
 		{
 
 		}
+		~raft_peer()
+		{
+			stop();
+		}
 		void send_cmd(cmd_t cmd)
 		{
 			cmd_queue_.push(std::move(cmd));
