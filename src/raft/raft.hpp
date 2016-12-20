@@ -257,6 +257,8 @@ namespace xraft
 						continue;
 					if (itr.index_ <= get_last_log_entry_index())
 					{
+						if (itr.index_ <= last_snapshot_index_)
+							continue;
 						auto entry = get_log_entry(itr.index_);
 						if (entry .term_== itr.term_)
 							continue;
@@ -655,7 +657,8 @@ namespace xraft
 		}
 		void make_snapshot_done_callback(int64_t index)
 		{
-			set_election_timer();
+			if(!check_leader())
+				set_election_timer();
 			snapshot_reader reader;
 			auto filepath = get_snapshot_filepath();
 			if (!reader.open(filepath))

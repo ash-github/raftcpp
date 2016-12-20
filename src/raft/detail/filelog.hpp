@@ -168,12 +168,46 @@ namespace detail
 			}
 			auto old_data_file = get_data_file_path();
 			auto old_index_file = get_index_file_path();
+
+			index_file_.open(get_index_file_path(), std::ios::binary| std::ios::in);
+			check_apply(index_file_.good());
+
+			std::ofstream tmp_file(get_index_file_path() + ".tmp", std::ios::binary | std::ios::trunc);
+			check_apply(tmp_file.good());
+
+			offset = 0;
+			while (index_file_.good())
+			{
+				int64_t value = 0;
+				int64_t data = 0;
+				index_file_.read((char*)&value, sizeof(value));
+				if (index_file_.eof())
+					break;
+				index_file_.read((char*)&data, sizeof(data));
+				if (index_file_.eof())
+					return false;
+				if (offset == 0)
+					offset = data;
+				data -= offset;
+				assert(data >= 0);
+				tmp_file.write((char*)&value, sizeof(value));
+				check_apply(tmp_file.good());
+				tmp_file.write((char*)&data, sizeof(data));
+				check_apply(tmp_file.good());
+			}
+
+			tmp_file.close();
+			index_file_.close();
+			functors::fs::rm()(get_index_file_path());
+
 			auto beg = filepath_.find_last_of('/') + 1;
 			filepath_ = filepath_.substr(0, beg);
 			filepath_ += std::to_string(index + 1);
 			filepath_ += ".log";
+
 			functors::fs::rename()(old_data_file, get_data_file_path());
-			functors::fs::rename()(old_index_file, get_index_file_path());
+			functors::fs::rename()(old_index_file + ".tmp", get_index_file_path());
+
 			return open_no_lock();
 		}
 		int64_t get_last_log_index()
