@@ -139,9 +139,9 @@ namespace xraft
 		void init_rpc()
 		{
 			rpc_server_.reset(new rpc_server_t(myself_.port_, std::thread::hardware_concurrency()));
-			rpc_server_->register_handler("rpc_append_entries_request", timax::bind(&raft::handle_append_entries_request, this));
-			rpc_server_->register_handler("rpc_vote_request", timax::bind(&raft::handle_vote_request, this));
-			rpc_server_->register_handler("rpc_install_snapshot", timax::bind(&raft::handle_install_snapshot, this));
+			rpc_server_->register_handler("append_entries_request", timax::bind(&raft::handle_append_entries_request, this));
+			rpc_server_->register_handler("vote_request", timax::bind(&raft::handle_vote_request, this));
+			rpc_server_->register_handler("install_snapshot", timax::bind(&raft::handle_install_snapshot, this));
 			rpc_server_->start();
 		}
 		void init_pees()

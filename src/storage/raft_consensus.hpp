@@ -238,7 +238,7 @@ namespace timax { namespace db
 		void commit_entry(std::string&& buffer, int64_t log_index)
 		{
 			auto db_op = log_serializer::unpack(buffer);
-			if (db_op.op_type = static_cast<int>(log_op::Write))
+			if (static_cast<int>(log_op::Write) == db_op.op_type)
 			{
 				put(log_index, db_op.key, db_op.value);
 			}

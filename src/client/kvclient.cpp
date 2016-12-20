@@ -10,6 +10,7 @@ namespace kvclient
 int process(int argc, char* argv[])
 {
 	using namespace std::chrono_literals;
+	using namespace std::string_literals;
 	using client_type = timax::rpc::async_client<timax::rpc::msgpack_codec>;
 
 	client_type client;
@@ -42,6 +43,45 @@ int process(int argc, char* argv[])
 		auto task = client.call(endpoint, kvclient::get, key);
 		auto value = task.get(2s);
 		std::cout << "Get key(" << key << ") Value(" << value << ").\n";
+	}
+	else if ("puts" == op)
+	{
+		if (argc < 5)
+			return -1;
+
+		auto count = boost::lexical_cast<int>(argv[2]);
+		std::string address = argv[3];
+		uint16_t port = boost::lexical_cast<uint16_t>(argv[4]);
+
+		auto endpoint = timax::rpc::get_tcp_endpoint(address, port);
+
+		for (auto loop = 0; loop < count; ++loop)
+		{
+			auto key = "test"s + std::to_string(loop);
+			auto value = "value"s + std::to_string(loop);
+
+			auto task = client.call(endpoint, kvclient::put, key, value);
+			task.wait(2s);
+			std::cout << "Loop: " << loop << "..." << std::endl;
+		}
+	}
+	else if ("gets" == op)
+	{
+		if (argc < 5)
+			return -1;
+
+		auto count = boost::lexical_cast<int>(argv[2]);
+		std::string address = argv[3];
+		uint16_t port = boost::lexical_cast<uint16_t>(argv[4]);
+		auto endpoint = timax::rpc::get_tcp_endpoint(address, port);
+		for (auto loop = 0; loop < count; ++loop)
+		{
+			auto key = "test"s + std::to_string(loop);
+
+			auto task = client.call(endpoint, kvclient::get, key);
+			auto value = task.get(2s);
+			std::cout << "Get key(" << key << ") Value(" << value << ").\n";
+		}
 	}
 	else
 	{

@@ -1,0 +1,13 @@
+{
+    "append_log_timeout"     : 10000,
+    "election_timeout"      : 3000,
+    "heartbeat_duration"    : 1000,
+    "log_path"              : "d:/temp/tmp/9011/log/",
+    "snapshot_path"         : "d:/temp/tmp/9011/snaposhot/",
+    "meta_path"             : "d:/temp/tmp/9011/metadata/",
+    "this_node"             : { "addr" : "127.0.0.1", "port" : 9011, "id" : "9011" },
+    "peer_nodes"            : 
+    [
+        { "addr" : "127.0.0.1", "port" : 9010, "id" : "9010" }
+    ]
+}

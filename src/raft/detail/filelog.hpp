@@ -589,13 +589,13 @@ namespace detail
 		std::list<log_entry> log_entries_cache_;
 		std::size_t log_entries_cache_size_ = 0;
 		std::size_t max_cache_size_ = 1;
-		std::size_t max_file_size_ = 1024*1024;
+		std::size_t max_file_size_ = 1024;
 		int64_t last_index_ = 0;
 		std::string path_;
 		file current_file_;
 		int64_t current_file_last_index_ = 0;
 		std::map<int64_t, detail::file> logfiles_;
-		std::size_t max_log_file_count_ = 10;
+		std::size_t max_log_file_count_ = 5;
 		std::function<void()> make_snapshot_trigger_;
 	};
 }
