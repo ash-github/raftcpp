@@ -113,6 +113,30 @@ namespace timax { namespace db
 		std::function<void(snapshot_ptr)>	release_func_;
 	};
 
+	struct raft_consensus_config
+	{
+		struct raft_node
+		{
+			std::string	addr;
+			uint16_t		port;
+			std::string	id;
+
+			META(addr, port, id);
+		};
+
+		uint32_t					append_log_timeout;		// append log timeout
+		uint32_t					election_timeout;			// election timeout
+		uint32_t					heartbeat_duration;			// heart beat duration
+		std::string				log_path;
+		std::string				snapshot_path;
+		std::string				meta_path;
+		raft_node				this_node;
+		std::vector<raft_node>	peer_nodes;
+
+		META(append_log_timeout, election_timeout, heartbeat_duration, 
+			log_path, snapshot_path, meta_path, this_node, peer_nodes);
+	};
+
 	template <typename StoragePolicy>
 	class raft_consensus
 	{
@@ -122,11 +146,11 @@ namespace timax { namespace db
 		using sequence_list_type = sequence_list<snapshot_ptr>;
 
 	public:
-		raft_consensus(storage_policy& storage)
+		raft_consensus(storage_policy& storage, std::string const& consensus_config_path)
 			: storage_(storage)
 			, snapshot_blocks_([this](snapshot_ptr snapshot) { storage_.release_snapshot(snapshot); })
 		{
-			init();
+			init(consensus_config_path);
 		}
 
 		void put(std::string const& key, std::string const& value)
@@ -157,23 +181,27 @@ namespace timax { namespace db
 		}
 
 	private:
-		void init()
+		void init(std::string const& consensus_config_path)
 		{
 			raft_.regist_build_snapshot_callback(
 				[this](auto const& writer, auto log_index)
 			{
 				return write_snapshot(writer, log_index);
 			});
+
 			raft_.regist_install_snapshot_handle(
 				[this](auto& in_stream)
 			{
 				storage_.install_from_file(in_stream);
 			});
+
 			raft_.regist_commit_entry_callback(
 				[this](auto&& buffer, auto log_index)
 			{
 				commit_entry(std::move(buffer), log_index);
 			});
+
+			init_raft_config(consensus_config_path);
 		}
 
 		int64_t replicate(std::string&& data)
@@ -235,6 +263,38 @@ namespace timax { namespace db
 		void del(int64_t log_index, std::string const& key)
 		{
 			storage_.del(key);
+		}
+
+		void init_raft_config(std::string const& consensus_config_path)
+		{
+			std::ifstream in_stream;
+			in_stream.open(consensus_config_path);
+			std::vector<char> buffer;
+			in_stream.seekg(0, std::ios::end);
+			buffer.resize(in_stream.tellg());
+			in_stream.seekg(std::ios::beg);
+			in_stream.read(buffer.data(), buffer.size());
+
+			timax::rpc::kapok_codec codec{};
+			auto consensus_config = codec.template unpack<raft_consensus_config>(buffer.data(), buffer.size());
+			xraft::raft::raft_config config_internal;
+			config_internal.append_log_timeout_ = static_cast<size_t>(consensus_config.append_log_timeout);
+			config_internal.election_timeout_ = static_cast<size_t>(consensus_config.election_timeout);
+			config_internal.heartbeat_interval_ = static_cast<size_t>(consensus_config.heartbeat_duration);
+			config_internal.raftlog_base_path_ = consensus_config.log_path;
+			config_internal.snapshot_base_path_ = consensus_config.snapshot_path;
+			config_internal.metadata_base_path_ = consensus_config.meta_path;
+			config_internal.myself_.ip_ = consensus_config.this_node.addr;
+			config_internal.myself_.port_ = static_cast<int>(consensus_config.this_node.port);
+			config_internal.myself_.raft_id_ = consensus_config.this_node.id;
+
+			std::transform(consensus_config.peer_nodes.begin(), consensus_config.peer_nodes.end(),
+				std::back_inserter(config_internal.peers_), [](auto const& elem)
+			{
+				return xraft::raft::raft_config::raft_node{ elem.addr, static_cast<int>(elem.port), elem.id };
+			});
+
+			raft_.init(config_internal);
 		}
 
 	private:

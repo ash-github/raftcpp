@@ -4,7 +4,7 @@
 #include "rocksdb_storage.hpp"
 #include "raft_consensus.hpp"
 
-int main(void)
+int main(int argc, char* argv[])
 {
 	// our rpc server type
 	using timax::rpc::server;
@@ -22,8 +22,16 @@ int main(void)
 	using timax::rpc::exception;
 	using timax::rpc::error_code;
 
+	if (argc != 4)
+		std::cerr << "Usage: kvcarbin <port-number> <db_path-string> <config_path-string>";
+
+	auto port = boost::lexical_cast<uint16_t>(argv[1]);
+	std::string db_path = argv[2];
+	std::string config_path = argv[3];
+
 	// initialize our db object
-	db_type db{ "d:/temp/tmp/test_rocksdb" };
+	//db_type db{ "d:/temp/tmp/test_rocksdb", "raft_config.txt" };
+	db_type db{ db_path, config_path };
 
 	// instantialize our server object
 	server_type kv_store_service{ 8999, std::thread::hardware_concurrency() };

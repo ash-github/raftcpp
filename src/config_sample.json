@@ -1,0 +1,14 @@
+{
+    "append_log_timeout"     : 1000,
+    "election_timeout"      : 2000,
+    "heartbeat_duration"    : 2000,
+    "log_path"              : "d:/temp/tmp/test_rocksdb",
+    "snapshot_path"         : "d:/temp/tmp/test_rocksdb",
+    "meta_path"             : "d:/temp/tmp/test_rocksdb",
+    "this_node"             : { "addr" : "127.0.0.1", "port" : 9010, "id" : "1" },
+    "peer_nodes"            : 
+    [
+        { "addr" : "127.0.0.1", "port" : 9011, "id" : "2" },
+        { "addr" : "127.0.0.1", "port" : 9012, "id" : "3" }
+    ]
+}

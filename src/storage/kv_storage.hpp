@@ -49,9 +49,9 @@ namespace timax { namespace db
 		};
 
 	public:
-		explicit kv_storage(std::string const& path)
-			: storage_(path)
-			, consensus_(storage_)
+		explicit kv_storage(std::string const& db_path, std::string const& consensus_config_path)
+			: storage_(db_path)
+			, consensus_(storage_, consensus_config_path)
 		{
 		}
 
