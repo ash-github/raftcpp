@@ -128,8 +128,9 @@ namespace xraft
 				std::bind(&raft::make_snapshot_done_callback, this, 
 					std::placeholders::_1));
 
-			snapshot_builder_.regist_get_last_commit_index([this] {
-				return get_last_log_entry_index(); });
+			snapshot_builder_.regist_get_applied_index_handle([this] {
+				return last_applied_index_.load(); 
+			});
 
 			snapshot_builder_.regist_get_log_entry_term_handle([this](int64_t index) {
 				return get_log_entry(index).term_;
@@ -765,7 +766,7 @@ namespace xraft
 		std::atomic_int64_t last_snapshot_term_ = 0;
 		std::atomic_int64_t current_term_ = 0;
 		std::atomic_int64_t committed_index_ = 0;
-		int64_t last_applied_index_ = 0;
+		std::atomic_int64_t last_applied_index_ = 0;
 
 		std::string voted_for_;
 		std::string leader_id_;

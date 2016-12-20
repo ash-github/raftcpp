@@ -113,7 +113,7 @@ namespace xraft
 		class snapshot_builder
 		{
 		public:
-			using get_last_commit_index_handle = std::function<int64_t()>;
+			using get_applied_index_handle = std::function<int64_t()>;
 			using build_snapshot_callback = std::function<bool(const std::function<bool(const std::string &)>&, int64_t)>;
 			using build_snapshot_done_callback = std::function<void(int64_t)>;
 			using get_log_entry_term_handle = std::function<int64_t(int64_t)>;
@@ -128,9 +128,9 @@ namespace xraft
 				if (!functors::fs::mkdir()(snapshot_base_path_))
 					throw std::runtime_error("mkdir "+ snapshot_base_path_+" failed");
 			}
-			void regist_get_last_commit_index(const get_last_commit_index_handle &handle)
+			void regist_get_applied_index_handle(const get_applied_index_handle &handle)
 			{
-				get_last_commit_index_ = handle;
+				get_applied_index_ = handle;
 			}
 			void regist_get_log_entry_term_handle(const get_log_entry_term_handle &handle)
 			{
@@ -151,38 +151,38 @@ namespace xraft
 		private:
 			void do_make_snapshot()
 			{
-				snapshot_head head;
-				auto commit_index = get_last_commit_index_();
-				head.last_included_index_ = commit_index;
-				head.last_included_term_ = get_log_entry_term_(commit_index);
 				snapshot_writer writer;
-				std::string filepath = snapshot_base_path_ + std::to_string(commit_index) + ".ss";
+				snapshot_head head;
+
+				auto index= get_applied_index_();
+				head.last_included_index_ = index;
+				head.last_included_term_ = get_log_entry_term_(index);
+				
+				std::string filepath = snapshot_base_path_ + std::to_string(index) + ".ss";
+
 				if (!writer.open(filepath))
 					throw std::runtime_error("open "+filepath+ "error");
+
 				writer.write_sanpshot_head(head);
 				auto result = build_snapshot_([&writer](const std::string &buffer)
 				{
 					writer.write(buffer);
 					return true;
-				}, commit_index);
+				}, index);
+
 				if (result == false)
 				{
 					std::cout << "build_snapshot_ failed" << std::endl;
 					writer.discard();
 				}
 				writer.close();
-				commit_index = get_last_commit_index_();
-				if (head.last_included_index_ > commit_index || 
-					head.last_included_term_ > get_log_entry_term_(commit_index))
-				{
-					std::cout << "commit_index " << commit_index << std::endl;;
-				}
-				build_snapshot_done_(commit_index);
+
+				build_snapshot_done_(index);
 				//todo log snapshot done
 			}
 			std::string snapshot_base_path_;
 			get_log_entry_term_handle get_log_entry_term_;
-			get_last_commit_index_handle get_last_commit_index_;
+			get_applied_index_handle get_applied_index_;
 			build_snapshot_callback build_snapshot_;
 			build_snapshot_done_callback build_snapshot_done_;
 			bool is_stop_ = false;
