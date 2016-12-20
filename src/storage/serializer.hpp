@@ -132,23 +132,25 @@ namespace timax { namespace db
 
 		static bool unpack(std::ifstream& in_stream, std::string& key, std::string& value)
 		{
-			if (in_stream.eof())
-				return false;
-
-			uint32_t size;
-			in_stream >> size;
-			if (0 == size)
+			uint32_t size = 0;
+			in_stream.read(reinterpret_cast<char*>(&size), sizeof(uint32_t));
+			if (0 == size || in_stream.gcount() != sizeof(uint32_t))
 				return false;
 
 			key.resize(size);
 			in_stream.read(&key[0], size);
+			if (in_stream.gcount() != size)
+				return false;
 
-			in_stream >> size;
-			if (0 == size)
+			in_stream.read(reinterpret_cast<char*>(&size), sizeof(uint32_t));
+			if (0 == size || in_stream.gcount() != sizeof(uint32_t))
 				return false;
 
 			value.resize(size);
 			in_stream.read(&value[0], size);
+			if (in_stream.gcount() != size)
+				return false;
+
 			return true;
 		}
 	};

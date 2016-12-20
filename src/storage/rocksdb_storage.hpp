@@ -84,26 +84,19 @@ namespace timax { namespace db
 
 		void install_from_file(std::ifstream& in_stream)
 		{
-			std::unique_ptr<rocksdb::Iterator> itr{ db_->NewIterator(rocksdb::ReadOptions{}) };
-			
-			itr->SeekToFirst();
-			if (!itr->Valid())
-				throw std::runtime_error{ "Invalid iterator." };
-			auto begin_key = itr->key();
-
-			itr->SeekToLast();
-			if (!itr->Valid())
-				throw std::runtime_error{ "Invalid iterator." };
-			auto end_key = itr->key().ToString();
-
-			auto s = db_->DeleteRange(rocksdb::WriteOptions{}, db_->DefaultColumnFamily(), begin_key, end_key);
+			auto db_name = db_->GetName();
+			db_.reset();
+			auto s = rocksdb::DestroyDB(db_name, rocksdb::Options{});
 			if (!s.ok())
-				throw std::runtime_error{ "Failed to clear the rocksdb." };
+				throw std::runtime_error{ "Failed to destroy the rocksdb." };
+
+			init(db_name);
 
 			std::string key, value;
 			while (snapshot_serializer::unpack(in_stream, key, value))
 			{
-				db_->Put(rocksdb::WriteOptions{}, key, value);
+				//std::cout << key << " - " << value << std::endl;
+				put(key, value);
 			}
 		}
 

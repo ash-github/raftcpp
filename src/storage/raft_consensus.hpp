@@ -44,7 +44,7 @@ namespace timax { namespace db
 				return nullptr;
 
 			auto itr = snapshot_blocks_.begin();
-			if (advance > 1)
+			if (advance > 0)
 			{
 				std::advance(itr, advance);
 				log_index -= advance * array_size;
@@ -93,6 +93,18 @@ namespace timax { namespace db
 		int64_t get_begin_log_index() const noexcept
 		{
 			return log_index_begin_;
+		}
+
+		void reset()
+		{
+			for (auto& block : snapshot_blocks_)
+			{
+				release(block);
+			}
+
+			snapshot_blocks_.clear();
+			snapshot_blocks_.resize(1);
+			log_index_begin_ = 1;
 		}
 
 	private:
@@ -192,6 +204,7 @@ namespace timax { namespace db
 			raft_.regist_install_snapshot_handle(
 				[this](auto& in_stream)
 			{
+				snapshot_blocks_.reset();
 				storage_.install_from_file(in_stream);
 			});
 

@@ -70,12 +70,9 @@ namespace xraft
 				throw std::runtime_error("raft log init failed");
 			}
 			log_.set_make_snapshot_trigger([this] {
-				if (check_leader())
-				{
-					commiter_.push([this] {
+				commiter_.push([this] {
 						snapshot_builder_.make_snapshot();
 					});
-				}
 			});
 		}
 		void load_metadata()
@@ -84,12 +81,13 @@ namespace xraft
 			int64_t committed_index;
 			int64_t last_snapshot_term;
 			int64_t last_snapshot_index;
+			int64_t last_applied_index;
 			if (!metadata_.init(metadata_base_path_))
 			{
 				std::cout << "init metadata failed" << std::endl;
 				std::exit(0);
 			}
-			metadata_.get("last_applied_index", last_applied_index_);
+			
 			metadata_.get("voted_for", voted_for_);
 			if (metadata_.get("current_term", current_term))
 				current_term_ = current_term;
@@ -99,7 +97,8 @@ namespace xraft
 				last_snapshot_term_ = last_snapshot_term;
 			if (metadata_.get("last_snapshot_index", last_snapshot_index))
 				last_snapshot_index_ = last_snapshot_index;
-
+			if (metadata_.get("last_applied_index", last_applied_index))
+				last_applied_index_ = last_applied_index;
 		}
 		void init_timer()
 		{
@@ -281,6 +280,7 @@ namespace xraft
 						assert(itr.index_ == committed_index_ + 1);
 						commit_entry_callback_(std::move(itr.log_data_),itr.index_);
 						set_committed_index(committed_index_+1);
+						set_last_applied(committed_index_);
 					}
 				});
 			}
@@ -450,11 +450,13 @@ namespace xraft
 			std::random_device rd;
 			std::mt19937 gen(rd());
 			std::uniform_int_distribution<> dis(1, (int)election_timeout_);
+			set_voted_for("");
 			election_timer_id_ = timer_.set_timer(election_timeout_+ dis(gen),[this] {
 				std::cout << "------election timer callback------" << std::endl;
 				std::lock_guard<std::mutex> lock(mtx_);
 				set_term(current_term_ + 1);
 				state_ = state::e_candidate;
+				set_voted_for(myself_.raft_id_);
 				for (auto &itr : pees_)
 					itr->send_cmd(raft_peer::cmd_t::e_election);
 				set_election_timer();
@@ -648,10 +650,12 @@ namespace xraft
 		}
 		bool make_snapshot_callback(const std::function<bool(const std::string &)> &writer, int64_t index)
 		{
+			cancel_election_timer();
 			return build_snapshot_callback_(writer, index);
 		}
 		void make_snapshot_done_callback(int64_t index)
 		{
+			set_election_timer();
 			snapshot_reader reader;
 			auto filepath = get_snapshot_filepath();
 			if (!reader.open(filepath))
@@ -702,7 +706,8 @@ namespace xraft
 		}
 		void set_voted_for(const std::string &raft_id)
 		{
-			TRACE;
+			if(!raft_id.empty())
+				TRACE;
 			voted_for_ = raft_id;
 			if (!metadata_.set("voted_for", voted_for_))
 			{

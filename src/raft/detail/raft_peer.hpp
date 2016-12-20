@@ -94,6 +94,7 @@ namespace detail
 						next_index_ = index;
 					if (index == match_index_ && send_heartbeat_)
 					{
+						std::cout << "index:" << index << "match_index" << match_index_ << std::endl;
 						send_heartbeat_ = false;
 						do_sleep(next_heartbeat_delay());
 						continue;

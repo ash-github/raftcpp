@@ -369,7 +369,10 @@ namespace detail
 				current_file_.get_log_start() <= index &&
 				index <= current_file_.get_last_log_index())
 			{
-				return current_file_.get_entry(index, entry);
+				auto ret =  current_file_.get_entry(index, entry);
+				if (!ret)
+					return false;
+				return true;
 			}
 			for (auto itr = logfiles_.begin(); itr != logfiles_.end(); ++itr)
 			{
@@ -508,7 +511,7 @@ namespace detail
 			std::lock_guard<std::mutex> lock(mtx_);
 			if (logfiles_.size())
 				return logfiles_.begin()->second.get_log_start();
-			else if(current_file_.is_open())
+			if (current_file_.is_open())
 				return current_file_.get_log_start();
 			return 0;
 		}
