@@ -135,6 +135,11 @@ namespace detail
 				{
 					std::cout << e.what() << std::endl;
 				}
+				catch (timax::rpc::exception const& e)
+				{
+					std::cout << e.get_error_message() << std::endl;
+				}
+
 			} while (true);
 		}
 
@@ -269,9 +274,9 @@ namespace detail
 				auto resp = rpc_client_.call(endpoint_, RPC::vote_request,req);
 				vote_response_callback_(resp);
 			}
-			catch (const std::exception& e)
+			catch (timax::rpc::exception const& e)
 			{
-				std::cout << e.what() << std::endl;
+				std::cout << e.get_error_message() << std::endl;
 			}
 		}
 

@@ -34,7 +34,7 @@ int main(int argc, char* argv[])
 	db_type db{ db_path, config_path };
 
 	// instantialize our server object
-	server_type kv_store_service{ 8999, std::thread::hardware_concurrency() };
+	server_type kv_store_service{ port, std::thread::hardware_concurrency() };
 
 	// register put operation
 	kv_store_service.register_handler("put", 
@@ -46,6 +46,7 @@ int main(int argc, char* argv[])
 		}
 		catch (std::exception const& e)
 		{
+			std::cout << e.what() << std::endl;
 			throw exception{ error_code::FAIL, e.what() };
 		}
 	});
@@ -60,6 +61,7 @@ int main(int argc, char* argv[])
 		}
 		catch (std::exception const& e)
 		{
+			std::cout << e.what() << std::endl;
 			throw exception{ error_code::FAIL, e.what() };
 		}
 	});
@@ -74,10 +76,12 @@ int main(int argc, char* argv[])
 		}
 		catch (std::exception const& e)
 		{
+			std::cout << e.what() << std::endl;
 			throw exception{ error_code::FAIL, e.what() };
 		}
 	});
 
+	kv_store_service.start();
 	std::getchar();
 	kv_store_service.stop();
 	return 0;
